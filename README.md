@@ -199,14 +199,14 @@ cp .env .env.local
 Укажите в `.env.local` актуальные значения:
 
 ```ini
-# OpenAI API ключ (обязательно!)
-HUGGINGFACE_API_KEY="sk-ваш-реальный-ключ"
+# HuggingFace API ключ (обязательно!)
+HUGGINGFACE_API_KEY="hf_ваш-ключ"
 
 # Email владельца для получения уведомлений
 MY_EMAIL=ваша@почта(замените на свою почту!)
 
-# Настройки почтового сервера (SMTP Яндекс)
-MAILER_DSN=smtp://ваша@почта:пароль@smtp.ваша@почта:465?encryption=ssl(замените на подключение к своей почте)
+# Настройки почтового сервера (SMTP Mail.ru или другой)
+MAILER_DSN=smtp://user@mail.ru:password@smtp.mail.ru:465?encryption=ssl
 
 # Секретный ключ приложения
 APP_SECRET=ваш_сгенерированный_секрет
@@ -250,7 +250,7 @@ docker compose exec php bin/console cache:clear
 
 ```bash
 # Проверка API — отправка тестового сообщения
-curl -X POST http://localhost/api/contact \
+curl -X POST http://localhost:8080/api/contact \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Иван",

@@ -46,7 +46,6 @@ class HuggingFaceModerationService
                 throw new Exception('Не удалось получить результат от Hugging Face API');
             }
 
-            // DEBUG: логируем все классификации
             foreach ($classifications as $i => $c) {
                 $this->logger->debug('HF classification', [
                     'index' => $i,
