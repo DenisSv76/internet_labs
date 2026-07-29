@@ -4,12 +4,16 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    my_email: '%env(MY_EMAIL)%'
+    huggingface_api_key: '%env(HUGGINGFACE_API_KEY)%'
 
 services:
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            $myEmail: '%my_email%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name
@@ -19,8 +23,18 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
-    App\EventSubscriber\CheckReadMessageSubscriber:
-        tags:
-            - { name: doctrine.event_listener, event: postPersist }
+    
+    limiter.anonymous_api.public:
+        alias: 'limiter.anonymous_api'
+        public: true
+    
+    # явная привязка аргументов для вашего сервиса
+    App\Service\RateLimiterService:
+        bind:
+            $anonymousApiLimiter: '@limiter.anonymous_api.public'
+            $tokens: '%env(int:RATE_LIMIT_TOKENS)%'
+    App\Service\HuggingFaceModerationService:
+        arguments:
+            $huggingFaceApiKey: '%huggingface_api_key%'
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

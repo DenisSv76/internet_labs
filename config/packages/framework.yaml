@@ -8,6 +8,12 @@ framework:
     #esi: true
     #fragments: true
 
+    exceptions:
+        Symfony\Component\HttpKernel\Exception\NotFoundHttpException:
+            status_code: 404
+        Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException:
+            status_code: 405
+
 when@test:
     framework:
         test: true

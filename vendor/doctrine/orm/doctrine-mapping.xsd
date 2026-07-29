@@ -155,10 +155,20 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:complexType name="object">
+    <xs:attribute name="class" type="xs:string" use="required"/>
+    <xs:anyAttribute namespace="##other"/>
+  </xs:complexType>
+
   <xs:complexType name="option" mixed="true">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="option" type="orm:option"/>
-      <xs:any minOccurs="0" maxOccurs="unbounded" namespace="##other"/>
+    <xs:choice minOccurs="0" maxOccurs="1">
+      <xs:element name="object" type="orm:object"/>
+      <xs:sequence>
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="option" type="orm:option"/>
+          <xs:any minOccurs="0" maxOccurs="unbounded" namespace="##other"/>
+        </xs:choice>
+      </xs:sequence>
     </xs:choice>
     <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
     <xs:anyAttribute namespace="##other"/>
@@ -243,6 +253,7 @@
     <xs:attribute name="length" type="xs:NMTOKEN" />
     <xs:attribute name="unique" type="xs:boolean" default="false" />
     <xs:attribute name="nullable" type="xs:boolean" default="false" />
+    <xs:attribute name="index" type="xs:boolean" default="false" />
     <xs:attribute name="insertable" type="xs:boolean" default="true" />
     <xs:attribute name="updatable" type="xs:boolean" default="true" />
     <xs:attribute name="generated" type="orm:generated-type" default="NEVER" />
@@ -321,7 +332,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:any minOccurs="0" maxOccurs="unbounded" namespace="##other"/>
     </xs:choice>
-    <xs:attribute name="value" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="value" type="orm:type" use="required"/>
     <xs:attribute name="class" type="orm:fqcn" use="required"/>
     <xs:anyAttribute namespace="##other"/>
   </xs:complexType>

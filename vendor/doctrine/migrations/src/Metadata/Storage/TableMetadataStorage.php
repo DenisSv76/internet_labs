@@ -9,6 +9,9 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Connections\PrimaryReadReplicaConnection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
+use Doctrine\DBAL\Schema\ComparatorConfig;
+use Doctrine\DBAL\Schema\Name\UnqualifiedName;
+use Doctrine\DBAL\Schema\PrimaryKeyConstraint;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\DBAL\Schema\TableDiff;
 use Doctrine\DBAL\Types\Types;
@@ -25,9 +28,14 @@ use Doctrine\Migrations\Version\Version;
 use InvalidArgumentException;
 
 use function array_change_key_case;
+use function assert;
+use function class_exists;
+use function explode;
 use function floatval;
+use function method_exists;
 use function round;
 use function sprintf;
+use function str_contains;
 use function strlen;
 use function strpos;
 use function strtolower;
@@ -112,7 +120,7 @@ final class TableMetadataStorage implements MetadataStorage
         $this->connection->executeStatement(
             sprintf(
                 'DELETE FROM %s WHERE 1 = 1',
-                $this->platform->quoteIdentifier($this->configuration->getTableName()),
+                $this->configuration->getTableName(),
             ),
         );
     }
@@ -196,8 +204,30 @@ final class TableMetadataStorage implements MetadataStorage
             return null;
         }
 
-        $currentTable = $this->schemaManager->introspectTable($this->configuration->getTableName());
-        $diff         = $this->schemaManager->createComparator()->compareTables($currentTable, $expectedTable);
+        if (class_exists(ComparatorConfig::class)) {
+            $comparator = $this->schemaManager->createComparator((new ComparatorConfig())->withReportModifiedIndexes(false));
+        } else {
+            $comparator = $this->schemaManager->createComparator();
+        }
+
+        /** @phpstan-ignore function.alreadyNarrowedType */
+        if (method_exists($this->schemaManager, 'introspectTableByUnquotedName')) {
+            if (str_contains($this->configuration->getTableName(), '.')) {
+                [$namespace, $tableName] = explode('.', $this->configuration->getTableName(), 2);
+                assert($namespace !== '' && $tableName !== '');
+                $currentTable = $this->schemaManager->introspectTableByUnquotedName(
+                    $tableName,
+                    $namespace,
+                );
+            } else {
+                $currentTable = $this->schemaManager->introspectTableByUnquotedName($this->configuration->getTableName());
+            }
+        } else {
+            /** @phpstan-ignore method.deprecated */
+            $currentTable = $this->schemaManager->introspectTable($this->configuration->getTableName());
+        }
+
+        $diff = $comparator->compareTables($currentTable, $expectedTable);
 
         return $diff->isEmpty() ? null : $diff;
     }
@@ -240,7 +270,15 @@ final class TableMetadataStorage implements MetadataStorage
         $schemaChangelog->addColumn($this->configuration->getExecutedAtColumnName(), 'datetime', ['notnull' => false]);
         $schemaChangelog->addColumn($this->configuration->getExecutionTimeColumnName(), 'integer', ['notnull' => false]);
 
-        $schemaChangelog->setPrimaryKey([$this->configuration->getVersionColumnName()]);
+        if (class_exists(PrimaryKeyConstraint::class)) {
+            $constraint = PrimaryKeyConstraint::editor()
+                ->setColumnNames(UnqualifiedName::unquoted($this->configuration->getVersionColumnName()))
+                ->create();
+
+            $schemaChangelog->addPrimaryKeyConstraint($constraint);
+        } else {
+            $schemaChangelog->setPrimaryKey([$this->configuration->getVersionColumnName()]);
+        }
 
         return $schemaChangelog;
     }
@@ -276,10 +314,11 @@ final class TableMetadataStorage implements MetadataStorage
 
     private function isAlreadyV3Format(AvailableMigration $availableMigration, ExecutedMigration $executedMigration): bool
     {
-        return strpos(
-            (string) $availableMigration->getVersion(),
-            (string) $executedMigration->getVersion(),
-        ) !== strlen((string) $availableMigration->getVersion()) -
-                strlen((string) $executedMigration->getVersion());
+        return (string) $availableMigration->getVersion() === (string) $executedMigration->getVersion()
+            || strpos(
+                (string) $availableMigration->getVersion(),
+                (string) $executedMigration->getVersion(),
+            ) !== strlen((string) $availableMigration->getVersion()) -
+                    strlen((string) $executedMigration->getVersion());
     }
 }

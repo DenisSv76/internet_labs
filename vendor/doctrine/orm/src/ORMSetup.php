@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM;
 
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\Mapping\Driver\AttributeDriver;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
+use Doctrine\Persistence\Mapping\Driver\ClassLocator;
 use Psr\Cache\CacheItemPoolInterface;
 use Redis;
 use RuntimeException;
@@ -20,20 +22,49 @@ use function extension_loaded;
 use function md5;
 use function sys_get_temp_dir;
 
+use const PHP_VERSION_ID;
+
 final class ORMSetup
 {
     /**
      * Creates a configuration with an attribute metadata driver.
      *
-     * @param string[] $paths
+     * @param string[]|ClassLocator $paths
      */
     public static function createAttributeMetadataConfiguration(
-        array $paths,
+        array|ClassLocator $paths,
         bool $isDevMode = false,
         string|null $proxyDir = null,
         CacheItemPoolInterface|null $cache = null,
     ): Configuration {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                '%s is deprecated in favor of %s, and will be removed in 4.0.',
+                __METHOD__,
+                self::class . '::createAttributeMetadataConfig()',
+            );
+        }
+
         $config = self::createConfiguration($isDevMode, $proxyDir, $cache);
+        $config->setMetadataDriverImpl(new AttributeDriver($paths));
+
+        return $config;
+    }
+
+    /**
+     * Creates a configuration with an attribute metadata driver.
+     *
+     * @param string[]|ClassLocator $paths
+     */
+    public static function createAttributeMetadataConfig(
+        array|ClassLocator $paths,
+        bool $isDevMode = false,
+        string|null $cacheNamespaceSeed = null,
+        CacheItemPoolInterface|null $cache = null,
+    ): Configuration {
+        $config = self::createConfig($isDevMode, $cacheNamespaceSeed, $cache);
         $config->setMetadataDriverImpl(new AttributeDriver($paths));
 
         return $config;
@@ -51,8 +82,40 @@ final class ORMSetup
         CacheItemPoolInterface|null $cache = null,
         bool $isXsdValidationEnabled = true,
     ): Configuration {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                '%s is deprecated in favor of %s, and will be removed in 4.0.',
+                __METHOD__,
+                self::class . '::createXMLMetadataConfig()',
+            );
+        }
+
         $config = self::createConfiguration($isDevMode, $proxyDir, $cache);
         $config->setMetadataDriverImpl(new XmlDriver($paths, XmlDriver::DEFAULT_FILE_EXTENSION, $isXsdValidationEnabled));
+
+        return $config;
+    }
+
+    /**
+     * Creates a configuration with an XML metadata driver.
+     *
+     * @param string[] $paths
+     */
+    public static function createXMLMetadataConfig(
+        array $paths,
+        bool $isDevMode = false,
+        string|null $cacheNamespaceSeed = null,
+        CacheItemPoolInterface|null $cache = null,
+        bool $isXsdValidationEnabled = true,
+    ): Configuration {
+        $config = self::createConfig($isDevMode, $cacheNamespaceSeed, $cache);
+        $config->setMetadataDriverImpl(new XmlDriver(
+            $paths,
+            XmlDriver::DEFAULT_FILE_EXTENSION,
+            $isXsdValidationEnabled,
+        ));
 
         return $config;
     }
@@ -65,6 +128,16 @@ final class ORMSetup
         string|null $proxyDir = null,
         CacheItemPoolInterface|null $cache = null,
     ): Configuration {
+        if (PHP_VERSION_ID >= 80400 && $proxyDir !== null) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                '%s is deprecated in favor of %s, and will be removed in 4.0.',
+                __METHOD__,
+                self::class . '::createConfig()',
+            );
+        }
+
         $proxyDir = $proxyDir ?: sys_get_temp_dir();
 
         $cache = self::createCacheInstance($isDevMode, $proxyDir, $cache);
@@ -81,9 +154,23 @@ final class ORMSetup
         return $config;
     }
 
+    public static function createConfig(
+        bool $isDevMode = false,
+        string|null $cacheNamespaceSeed = null,
+        CacheItemPoolInterface|null $cache = null,
+    ): Configuration {
+        $cache  = self::createCacheInstance($isDevMode, $cacheNamespaceSeed, $cache);
+        $config = new Configuration();
+        $config->setMetadataCache($cache);
+        $config->setQueryCache($cache);
+        $config->setResultCache($cache);
+
+        return $config;
+    }
+
     private static function createCacheInstance(
         bool $isDevMode,
-        string $proxyDir,
+        string|null $cacheNamespaceSeed,
         CacheItemPoolInterface|null $cache,
     ): CacheItemPoolInterface {
         if ($cache !== null) {
@@ -101,7 +188,7 @@ final class ORMSetup
             return new ArrayAdapter();
         }
 
-        $namespace = 'dc2_' . md5($proxyDir);
+        $namespace = 'dc2_' . md5($cacheNamespaceSeed ?? 'default');
 
         if (extension_loaded('apcu') && apcu_enabled()) {
             return new ApcuAdapter($namespace);

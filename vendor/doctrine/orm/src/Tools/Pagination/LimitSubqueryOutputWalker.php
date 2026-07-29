@@ -52,7 +52,7 @@ use function substr;
  * Works with composite keys but cannot deal with queries that have multiple
  * root entities (e.g. `SELECT f, b from Foo, Bar`)
  *
- * @psalm-import-type QueryComponent from Parser
+ * @phpstan-import-type QueryComponent from Parser
  */
 class LimitSubqueryOutputWalker extends SqlOutputWalker
 {
@@ -89,17 +89,24 @@ class LimitSubqueryOutputWalker extends SqlOutputWalker
         $this->platform = $query->getEntityManager()->getConnection()->getDatabasePlatform();
         $this->rsm      = $parserResult->getResultSetMapping();
 
-        $query = clone $query;
+        $cloneQuery = clone $query;
+
+        $cloneQuery->setParameters(clone $query->getParameters());
+        $cloneQuery->setCacheable(false);
+
+        foreach ($query->getHints() as $name => $value) {
+            $cloneQuery->setHint($name, $value);
+        }
 
         // Reset limit and offset
-        $this->firstResult = $query->getFirstResult();
-        $this->maxResults  = $query->getMaxResults();
-        $query->setFirstResult(0)->setMaxResults(null);
+        $this->firstResult = $cloneQuery->getFirstResult();
+        $this->maxResults  = $cloneQuery->getMaxResults();
+        $cloneQuery->setFirstResult(0)->setMaxResults(null);
 
-        $this->em            = $query->getEntityManager();
+        $this->em            = $cloneQuery->getEntityManager();
         $this->quoteStrategy = $this->em->getConfiguration()->getQuoteStrategy();
 
-        parent::__construct($query, $parserResult, $queryComponents);
+        parent::__construct($cloneQuery, $parserResult, $queryComponents);
     }
 
     /**
@@ -125,7 +132,9 @@ class LimitSubqueryOutputWalker extends SqlOutputWalker
         $selectAliasToExpressionMap = [];
         // Get any aliases that are available for select expressions.
         foreach ($AST->selectClause->selectExpressions as $selectExpression) {
-            $selectAliasToExpressionMap[$selectExpression->fieldIdentificationVariable] = $selectExpression->expression;
+            if ($selectExpression->fieldIdentificationVariable !== null) {
+                $selectAliasToExpressionMap[$selectExpression->fieldIdentificationVariable] = $selectExpression->expression;
+            }
         }
 
         // Rebuild string orderby expressions to use the select expression they're referencing
@@ -406,7 +415,7 @@ class LimitSubqueryOutputWalker extends SqlOutputWalker
 
     /**
      * @return string[][]
-     * @psalm-return array{0: list<non-empty-string>, 1: list<string>}
+     * @phpstan-return array{0: list<non-empty-string>, 1: list<string>}
      */
     private function generateSqlAliasReplacements(): array
     {

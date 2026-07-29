@@ -8,8 +8,8 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Criteria;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\Internal\NoUnknownNamedArguments;
-use Doctrine\ORM\Internal\QueryType;
 use Doctrine\ORM\Query\Expr;
 use Doctrine\ORM\Query\Parameter;
 use Doctrine\ORM\Query\QueryExpressionVisitor;
@@ -46,7 +46,7 @@ class QueryBuilder implements Stringable
     /**
      * The array of DQL parts collected.
      *
-     * @psalm-var array<string, mixed>
+     * @phpstan-var array<string, mixed>
      */
     private array $dqlParts = [
         'distinct' => false,
@@ -70,7 +70,7 @@ class QueryBuilder implements Stringable
     /**
      * The query parameters.
      *
-     * @psalm-var ArrayCollection<int, Parameter>
+     * @phpstan-var ArrayCollection<int, Parameter>
      */
     private ArrayCollection $parameters;
 
@@ -87,7 +87,7 @@ class QueryBuilder implements Stringable
     /**
      * Keeps root entity alias names for join entities.
      *
-     * @psalm-var array<string, string>
+     * @phpstan-var array<string, string>
      */
     private array $joinRootAliases = [];
 
@@ -104,7 +104,7 @@ class QueryBuilder implements Stringable
     /**
      * Second level query cache mode.
      *
-     * @psalm-var Cache::MODE_*|null
+     * @phpstan-var Cache::MODE_*|null
      */
     protected int|null $cacheMode = null;
 
@@ -118,6 +118,13 @@ class QueryBuilder implements Stringable
     private int $boundCounter = 0;
 
     /**
+     * The hints to set on the query.
+     *
+     * @var array<string, string|int|bool|iterable<mixed>|object>
+     */
+    private array $hints = [];
+
+    /**
      * Initializes a new <tt>QueryBuilder</tt> that uses the given <tt>EntityManager</tt>.
      *
      * @param EntityManagerInterface $em The EntityManager to use.
@@ -126,6 +133,11 @@ class QueryBuilder implements Stringable
         private readonly EntityManagerInterface $em,
     ) {
         $this->parameters = new ArrayCollection();
+    }
+
+    final protected function getType(): QueryType
+    {
+        return $this->type;
     }
 
     /**
@@ -203,14 +215,47 @@ class QueryBuilder implements Stringable
         return $this;
     }
 
-    /** @psalm-return Cache::MODE_*|null */
+    /** @return array<string, string|int|bool|iterable<mixed>|object> */
+    public function getHints(): array
+    {
+        return $this->hints;
+    }
+
+    /**
+     * Gets the value of a query hint. If the hint name is not recognized, FALSE is returned.
+     *
+     * @return mixed The value of the hint or FALSE, if the hint name is not recognized.
+     */
+    public function getHint(string $name): mixed
+    {
+        return $this->hints[$name] ?? false;
+    }
+
+    public function hasHint(string $name): bool
+    {
+        return isset($this->hints[$name]);
+    }
+
+    /**
+     * Adds hints for the query.
+     *
+     * @return $this
+     */
+    public function setHint(string $name, mixed $value): static
+    {
+        $this->hints[$name] = $value;
+
+        return $this;
+    }
+
+    /** @phpstan-return Cache::MODE_*|null */
     public function getCacheMode(): int|null
     {
         return $this->cacheMode;
     }
 
     /**
-     * @psalm-param Cache::MODE_* $cacheMode
+     * @phpstan-param Cache::MODE_* $cacheMode
      *
      * @return $this
      */
@@ -283,6 +328,10 @@ class QueryBuilder implements Stringable
             $query->setCacheRegion($this->cacheRegion);
         }
 
+        foreach ($this->hints as $name => $value) {
+            $query->setHint($name, $value);
+        }
+
         return $query;
     }
 
@@ -301,8 +350,13 @@ class QueryBuilder implements Stringable
         } else {
             // Should never happen with correct joining order. Might be
             // thoughtful to throw exception instead.
-            // @phpstan-ignore method.deprecated
-            $rootAlias = $this->getRootAlias();
+            $aliases = $this->getRootAliases();
+
+            if (! isset($aliases[0])) {
+                throw new RuntimeException('No alias was set before invoking getRootAlias().');
+            }
+
+            $rootAlias = $aliases[0];
         }
 
         $this->joinRootAliases[$alias] = $rootAlias;
@@ -350,7 +404,7 @@ class QueryBuilder implements Stringable
      * </code>
      *
      * @return string[]
-     * @psalm-return list<string>
+     * @phpstan-return list<string>
      */
     public function getRootAliases(): array
     {
@@ -360,7 +414,7 @@ class QueryBuilder implements Stringable
             if (is_string($fromClause)) {
                 $spacePos = strrpos($fromClause, ' ');
 
-                /** @psalm-var class-string $from */
+                /** @phpstan-var class-string $from */
                 $from  = substr($fromClause, 0, $spacePos);
                 $alias = substr($fromClause, $spacePos + 1);
 
@@ -387,7 +441,7 @@ class QueryBuilder implements Stringable
      * </code>
      *
      * @return string[]
-     * @psalm-return list<string>
+     * @phpstan-return list<string>
      */
     public function getAllAliases(): array
     {
@@ -407,7 +461,7 @@ class QueryBuilder implements Stringable
      * </code>
      *
      * @return string[]
-     * @psalm-return list<class-string>
+     * @phpstan-return list<class-string>
      */
     public function getRootEntities(): array
     {
@@ -417,7 +471,7 @@ class QueryBuilder implements Stringable
             if (is_string($fromClause)) {
                 $spacePos = strrpos($fromClause, ' ');
 
-                /** @psalm-var class-string $from */
+                /** @phpstan-var class-string $from */
                 $from  = substr($fromClause, 0, $spacePos);
                 $alias = substr($fromClause, $spacePos + 1);
 
@@ -475,7 +529,7 @@ class QueryBuilder implements Stringable
      *        )));
      * </code>
      *
-     * @psalm-param ArrayCollection<int, Parameter> $parameters
+     * @phpstan-param ArrayCollection<int, Parameter> $parameters
      *
      * @return $this
      */
@@ -489,7 +543,7 @@ class QueryBuilder implements Stringable
     /**
      * Gets all defined query parameters for the query being constructed.
      *
-     * @psalm-return ArrayCollection<int, Parameter>
+     * @phpstan-return ArrayCollection<int, Parameter>
      */
     public function getParameters(): ArrayCollection
     {
@@ -504,7 +558,7 @@ class QueryBuilder implements Stringable
         $key = Parameter::normalizeName($key);
 
         $filteredParameters = $this->parameters->filter(
-            static fn (Parameter $parameter): bool => $key === $parameter->getName()
+            static fn (Parameter $parameter): bool => $key === $parameter->getName(),
         );
 
         return ! $filteredParameters->isEmpty() ? $filteredParameters->first() : null;
@@ -537,6 +591,10 @@ class QueryBuilder implements Stringable
      */
     public function setMaxResults(int|null $maxResults): static
     {
+        if ($this->type === QueryType::Delete || $this->type === QueryType::Update) {
+            throw new RuntimeException('Setting a limit is not supported for delete or update queries.');
+        }
+
         $this->maxResults = $maxResults;
 
         return $this;
@@ -557,7 +615,7 @@ class QueryBuilder implements Stringable
      * The available parts are: 'select', 'from', 'join', 'set', 'where',
      * 'groupBy', 'having' and 'orderBy'.
      *
-     * @psalm-param string|object|list<string>|array{join: array<int|string, object>} $dqlPart
+     * @phpstan-param string|object|list<string>|array{join: array<int|string, object>} $dqlPart
      *
      * @return $this
      */
@@ -578,14 +636,25 @@ class QueryBuilder implements Stringable
             $dqlPart = reset($dqlPart);
         }
 
-        // This is introduced for backwards compatibility reasons.
-        // TODO: Remove for 3.0
         if ($dqlPartName === 'join') {
             $newDqlPart = [];
 
             foreach ($dqlPart as $k => $v) {
-                // @phpstan-ignore method.deprecated
-                $k = is_numeric($k) ? $this->getRootAlias() : $k;
+                if (is_numeric($k)) {
+                    Deprecation::trigger(
+                        'doctrine/orm',
+                        'https://github.com/doctrine/orm/pull/12051',
+                        'Using numeric keys in %s for join parts is deprecated and will not be supported in 4.0. Use an associative array with the root alias as key instead.',
+                        __METHOD__,
+                    );
+                    $aliases = $this->getRootAliases();
+
+                    if (! isset($aliases[0])) {
+                        throw new RuntimeException('No alias was set before invoking add().');
+                    }
+
+                    $k = $aliases[0];
+                }
 
                 $newDqlPart[$k] = $v;
             }
@@ -831,7 +900,7 @@ class QueryBuilder implements Stringable
      *         ->join('u.Phonenumbers', 'p', Expr\Join::WITH, 'p.is_primary = 1');
      * </code>
      *
-     * @psalm-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
+     * @phpstan-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
      *
      * @return $this
      */
@@ -858,7 +927,7 @@ class QueryBuilder implements Stringable
      *         ->from('User', 'u')
      *         ->innerJoin('u.Phonenumbers', 'p', Expr\Join::WITH, 'p.is_primary = 1');
      *
-     * @psalm-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
+     * @phpstan-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
      *
      * @return $this
      */
@@ -899,7 +968,7 @@ class QueryBuilder implements Stringable
      *         ->leftJoin('u.Phonenumbers', 'p', Expr\Join::WITH, 'p.is_primary = 1');
      * </code>
      *
-     * @psalm-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
+     * @phpstan-param Expr\Join::ON|Expr\Join::WITH|null $conditionType
      *
      * @return $this
      */
@@ -1237,7 +1306,7 @@ class QueryBuilder implements Stringable
     /**
      * Gets all query parts.
      *
-     * @psalm-return array<string, mixed> $dqlParts
+     * @phpstan-return array<string, mixed> $dqlParts
      */
     public function getDQLParts(): array
     {
@@ -1297,7 +1366,7 @@ class QueryBuilder implements Stringable
         return $dql;
     }
 
-    /** @psalm-param array<string, mixed> $options */
+    /** @phpstan-param array<string, mixed> $options */
     private function getReducedDQLQueryPart(string $queryPartName, array $options = []): string
     {
         $queryPart = $this->getDQLPart($queryPartName);
@@ -1315,7 +1384,7 @@ class QueryBuilder implements Stringable
      * Resets DQL parts.
      *
      * @param string[]|null $parts
-     * @psalm-param list<string>|null $parts
+     * @phpstan-param list<string>|null $parts
      *
      * @return $this
      */

@@ -9,25 +9,34 @@
         "php": ">=8.3.14",
         "ext-ctype": "*",
         "ext-iconv": "*",
-        "doctrine/dbal": "^3",
-        "doctrine/doctrine-bundle": "^2.13",
-        "doctrine/doctrine-migrations-bundle": "^3.3",
-        "doctrine/orm": "^3.3",
+        "doctrine/dbal": "^3.10.6",
+        "doctrine/doctrine-bundle": "^2.19",
+        "doctrine/doctrine-migrations-bundle": "^3.7",
+        "doctrine/orm": "^3.6.7",
+        "nelmio/api-doc-bundle": ">=5.10.3",
+        "nelmio/cors-bundle": "^2.5",
         "runtime/frankenphp-symfony": "^0.2.0",
-        "symfony/console": "7.2.*",
-        "symfony/doctrine-messenger": "7.2.*",
-        "symfony/dotenv": "7.2.*",
-        "symfony/flex": "^2",
-        "symfony/framework-bundle": "7.2.*",
-        "symfony/http-foundation": "7.2.*",
-        "symfony/mailer": "7.2.*",
-        "symfony/messenger": "7.2.*",
-        "symfony/runtime": "7.2.*",
-        "symfony/security-bundle": "7.2.*",
-        "symfony/security-core": "7.2.*",
-        "symfony/serializer": "7.2.*",
-        "symfony/validator": "7.2.*",
-        "symfony/yaml": "7.2.*"
+        "symfony/ai-bundle": "^0.12.0",
+        "symfony/ai-hugging-face-platform": "^0.12.0",
+        "symfony/ai-platform": "^0.12.0",
+        "symfony/console": "^7.4.14",
+        "symfony/doctrine-messenger": "^7.4.14",
+        "symfony/dotenv": "^7.4.14",
+        "symfony/flex": "^2.11",
+        "symfony/framework-bundle": "^7.4.14",
+        "symfony/http-client": "^7.4.14",
+        "symfony/http-foundation": "^7.4.14",
+        "symfony/lock": "^7.4.14",
+        "symfony/mailer": "^7.4.14",
+        "symfony/messenger": "^7.4.14",
+        "symfony/monolog-bundle": "^4.0",
+        "symfony/rate-limiter": "^7.4.14",
+        "symfony/runtime": "^7.4.14",
+        "symfony/security-bundle": "^7.4.14",
+        "symfony/security-core": "^7.4.14",
+        "symfony/serializer": "^7.4.14",
+        "symfony/validator": "^7.4.14",
+        "symfony/yaml": "^7.4.14"
     },
     "config": {
         "allow-plugins": {
@@ -76,11 +85,11 @@
     "extra": {
         "symfony": {
             "allow-contrib": false,
-            "require": "7.2.*",
+            "require": "^7.4",
             "docker": true
         }
     },
     "require-dev": {
-        "symfony/maker-bundle": "^1.61"
+        "symfony/maker-bundle": "^1.67"
     }
 }

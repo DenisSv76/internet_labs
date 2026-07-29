@@ -31,7 +31,6 @@ use function array_map;
 use function array_push;
 use function array_search;
 use function array_values;
-use function assert;
 use function class_exists;
 use function class_parents;
 use function count;
@@ -82,7 +81,7 @@ class SchemaValidator
      * 2. Check if "mappedBy" and "inversedBy" are consistent to each other.
      * 3. Check if "referencedColumnName" attributes are really pointing to primary key columns.
      *
-     * @psalm-return array<string, list<string>>
+     * @phpstan-return array<string, list<string>>
      */
     public function validateMapping(): array
     {
@@ -104,7 +103,7 @@ class SchemaValidator
      * Validates a single class of the current.
      *
      * @return string[]
-     * @psalm-return list<string>
+     * @phpstan-return list<string>
      */
     public function validateClass(ClassMetadata $class): array
     {
@@ -154,7 +153,7 @@ class SchemaValidator
                     $ce[] = 'The field ' . $class->name . '#' . $fieldName . ' is on the inverse side of a ' .
                             'bi-directional relationship, but the specified mappedBy association on the target-entity ' .
                             $assoc->targetEntity . '#' . $assoc->mappedBy . ' does not contain the required ' .
-                            "'inversedBy=\"" . $fieldName . "\"' attribute.";
+                            "'inversedBy: \"" . $fieldName . "\"' attribute.";
                 } elseif ($targetMetadata->associationMappings[$assoc->mappedBy]->inversedBy !== $fieldName) {
                     $ce[] = 'The mappings ' . $class->name . '#' . $fieldName . ' and ' .
                             $assoc->targetEntity . '#' . $assoc->mappedBy . ' are ' .
@@ -175,7 +174,7 @@ class SchemaValidator
                     $ce[] = 'The field ' . $class->name . '#' . $fieldName . ' is on the owning side of a ' .
                             'bi-directional relationship, but the specified inversedBy association on the target-entity ' .
                             $assoc->targetEntity . '#' . $assoc->inversedBy . ' does not contain the required ' .
-                            "'mappedBy=\"" . $fieldName . "\"' attribute.";
+                            "'mappedBy: \"" . $fieldName . "\"' attribute.";
                 } elseif ($targetMetadata->associationMappings[$assoc->inversedBy]->mappedBy !== $fieldName) {
                     $ce[] = 'The mappings ' . $class->name . '#' . $fieldName . ' and ' .
                             $assoc->targetEntity . '#' . $assoc->inversedBy . ' are ' .
@@ -329,9 +328,8 @@ class SchemaValidator
             array_filter(
                 array_map(
                     function (FieldMapping $fieldMapping) use ($class): string|null {
-                        $fieldName = $fieldMapping->fieldName;
-                        assert(isset($class->reflFields[$fieldName]));
-                        $propertyType = $class->reflFields[$fieldName]->getType();
+                        $fieldName    = $fieldMapping->fieldName;
+                        $propertyType = $class->propertyAccessors[$fieldName]->getUnderlyingReflector()->getType();
 
                         // If the field type is not a built-in type, we cannot check it
                         if (! Type::hasType($fieldMapping->type)) {

@@ -6,6 +6,7 @@ namespace Doctrine\Migrations;
 
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
+use Doctrine\DBAL\Schema\NamedObject;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\Migrations\Exception\NoTablesFound;
 use Doctrine\Migrations\Generator\Generator;
@@ -56,6 +57,7 @@ class SchemaDumper
         string $fqcn,
         array $excludedTablesRegexes = [],
         bool $formatted = false,
+        bool|null $nowdocOutput = null,
         int $lineLength = 120,
     ): string {
         $schema = $this->schemaManager->introspectSchema();
@@ -73,6 +75,7 @@ class SchemaDumper
             $upCode = $this->migrationSqlGenerator->generate(
                 $upSql,
                 $formatted,
+                $nowdocOutput,
                 $lineLength,
             );
 
@@ -80,11 +83,18 @@ class SchemaDumper
                 $up[] = $upCode;
             }
 
-            $downSql = [$this->platform->getDropTableSQL($table->getQuotedName($this->platform))];
+            /** @phpstan-ignore instanceof.alwaysTrue */
+            if ($table instanceof NamedObject) {
+                $tableName = $table->getObjectName()->toSQL($this->platform);
+            } else {
+                $tableName = $table->getName();
+            }
 
+            $downSql  = [$this->platform->getDropTableSQL($tableName)];
             $downCode = $this->migrationSqlGenerator->generate(
                 $downSql,
                 $formatted,
+                $nowdocOutput,
                 $lineLength,
             );
 
@@ -113,7 +123,15 @@ class SchemaDumper
     private function shouldSkipTable(Table $table, array $excludedTablesRegexes): bool
     {
         foreach (array_merge($excludedTablesRegexes, $this->excludedTablesRegexes) as $regex) {
-            if (self::pregMatch($regex, $table->getName()) !== 0) {
+            if (
+                self::pregMatch(
+                    $regex,
+                    /** @phpstan-ignore instanceof.alwaysTrue */
+                    $table instanceof NamedObject ?
+                    $table->getObjectName()->toString() :
+                    $table->getName(),
+                ) !== 0
+            ) {
                 return true;
             }
         }
@@ -130,6 +148,8 @@ class SchemaDumper
      *
      * @param mixed[]                                                 $matches
      * @param int-mask-of<PREG_OFFSET_CAPTURE|PREG_UNMATCHED_AS_NULL> $flags
+     *
+     * @phpstan-ignore parameterByRef.unusedType
      */
     private static function pregMatch(string $pattern, string $subject, array|null &$matches = null, int $flags = 0, int $offset = 0): int
     {

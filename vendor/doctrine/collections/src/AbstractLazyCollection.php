@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doctrine\Common\Collections;
 
 use Closure;
+use Doctrine\Deprecations\Deprecation;
 use LogicException;
 use ReturnTypeWillChange;
 use Traversable;
@@ -12,16 +13,17 @@ use Traversable;
 /**
  * Lazy collection that is backed by a concrete collection
  *
- * @psalm-template TKey of array-key
- * @psalm-template T
+ * @phpstan-template TKey of array-key
+ * @phpstan-template T
  * @template-implements Collection<TKey,T>
+ * @template-implements Selectable<TKey,T>
  */
-abstract class AbstractLazyCollection implements Collection
+abstract class AbstractLazyCollection implements Collection, Selectable
 {
     /**
      * The backed collection to use
      *
-     * @psalm-var Collection<TKey,T>|null
+     * @phpstan-var Collection<TKey,T>|null
      * @var Collection<mixed>|null
      */
     protected Collection|null $collection;
@@ -305,7 +307,7 @@ abstract class AbstractLazyCollection implements Collection
      * {@inheritDoc}
      *
      * @return Traversable<int|string, mixed>
-     * @psalm-return Traversable<TKey,T>
+     * @phpstan-return Traversable<TKey,T>
      */
     #[ReturnTypeWillChange]
     public function getIterator()
@@ -377,7 +379,7 @@ abstract class AbstractLazyCollection implements Collection
      *
      * @return bool
      *
-     * @psalm-assert-if-true Collection<TKey,T> $this->collection
+     * @phpstan-assert-if-true Collection<TKey,T> $this->collection
      */
     public function isInitialized()
     {
@@ -389,7 +391,7 @@ abstract class AbstractLazyCollection implements Collection
      *
      * @return void
      *
-     * @psalm-assert Collection<TKey,T> $this->collection
+     * @phpstan-assert Collection<TKey,T> $this->collection
      */
     protected function initialize()
     {
@@ -403,6 +405,18 @@ abstract class AbstractLazyCollection implements Collection
         if ($this->collection === null) {
             throw new LogicException('You must initialize the collection property in the doInitialize() method.');
         }
+
+        if ($this->collection instanceof Selectable) {
+            return;
+        }
+
+        Deprecation::trigger(
+            'doctrine/collections',
+            'https://github.com/doctrine/collections/pull/518',
+            'Initializing %s with a collection that does not implement %s is deprecated and will throw an exception in 3.0.',
+            self::class,
+            Selectable::class,
+        );
     }
 
     /**
@@ -411,4 +425,18 @@ abstract class AbstractLazyCollection implements Collection
      * @return void
      */
     abstract protected function doInitialize();
+
+    /**
+     * {@inheritDoc}
+     */
+    public function matching(Criteria $criteria)
+    {
+        $this->initialize();
+
+        if (! $this->collection instanceof Selectable) {
+            throw new LogicException('The backed collection must implement Selectable to use matching().');
+        }
+
+        return $this->collection->matching($criteria);
+    }
 }

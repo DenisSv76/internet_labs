@@ -43,7 +43,7 @@ use function method_exists;
  *
  *     $paths = ['/path/to/entity/mapping/files'];
  *
- *     $config = ORMSetup::createAttributeMetadataConfiguration($paths);
+ *     $config = ORMSetup::createAttributeMetadataConfig($paths);
  *     $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true], $config);
  *     $entityManager = new EntityManager($connection, $config);
  *
@@ -134,12 +134,16 @@ class EntityManager implements EntityManagerInterface
 
         $this->repositoryFactory = $config->getRepositoryFactory();
         $this->unitOfWork        = new UnitOfWork($this);
-        $this->proxyFactory      = new ProxyFactory(
-            $this,
-            $config->getProxyDir(),
-            $config->getProxyNamespace(),
-            $config->getAutoGenerateProxyClasses(),
-        );
+        if ($config->isNativeLazyObjectsEnabled()) {
+            $this->proxyFactory = new ProxyFactory($this);
+        } else {
+            $this->proxyFactory = new ProxyFactory(
+                $this,
+                $config->getProxyDir(),
+                $config->getProxyNamespace(),
+                $config->getAutoGenerateProxyClasses(),
+            );
+        }
 
         if ($config->isSecondLevelCacheEnabled()) {
             $cacheConfig  = $config->getSecondLevelCacheConfiguration();
@@ -565,9 +569,9 @@ class EntityManager implements EntityManagerInterface
     /**
      * {@inheritDoc}
      */
-    public function isUninitializedObject($obj): bool
+    public function isUninitializedObject($value): bool
     {
-        return $this->unitOfWork->isUninitializedObject($obj);
+        return $this->unitOfWork->isUninitializedObject($value);
     }
 
     public function getFilters(): FilterCollection
@@ -586,7 +590,7 @@ class EntityManager implements EntityManagerInterface
     }
 
     /**
-     * @psalm-param LockMode::* $lockMode
+     * @phpstan-param LockMode::* $lockMode
      *
      * @throws OptimisticLockException
      * @throws TransactionRequiredException

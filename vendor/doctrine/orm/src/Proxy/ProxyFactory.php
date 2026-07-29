@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doctrine\ORM\Proxy;
 
 use Closure;
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityNotFoundException;
 use Doctrine\ORM\ORMInvalidArgumentException;
@@ -13,30 +14,36 @@ use Doctrine\ORM\UnitOfWork;
 use Doctrine\ORM\Utility\IdentifierFlattener;
 use Doctrine\Persistence\Mapping\ClassMetadata;
 use Doctrine\Persistence\Proxy;
+use LogicException;
+use ReflectionClass;
 use ReflectionProperty;
 use Symfony\Component\VarExporter\ProxyHelper;
 
 use function array_combine;
 use function array_flip;
-use function array_intersect_key;
+use function array_keys;
 use function assert;
 use function bin2hex;
 use function chmod;
 use function class_exists;
+use function count;
 use function dirname;
 use function file_exists;
 use function file_put_contents;
 use function filemtime;
+use function func_num_args;
 use function is_bool;
 use function is_dir;
 use function is_int;
 use function is_writable;
 use function ltrim;
+use function method_exists;
 use function mkdir;
 use function preg_match_all;
 use function random_bytes;
 use function rename;
 use function rtrim;
+use function sprintf;
 use function str_replace;
 use function strpos;
 use function strrpos;
@@ -45,6 +52,7 @@ use function substr;
 use function ucfirst;
 
 use const DIRECTORY_SEPARATOR;
+use const PHP_VERSION_ID;
 
 /**
  * This factory is used to create proxy objects for entities at runtime.
@@ -127,6 +135,9 @@ EOPHP;
     /** @var array<class-string, Closure> */
     private array $proxyFactories = [];
 
+    private readonly string $proxyDir;
+    private readonly string $proxyNs;
+
     /**
      * Initializes a new instance of the <tt>ProxyFactory</tt> class that is
      * connected to the given <tt>EntityManager</tt>.
@@ -138,21 +149,54 @@ EOPHP;
      */
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly string $proxyDir,
-        private readonly string $proxyNs,
+        string|null $proxyDir = null,
+        string|null $proxyNs = null,
         bool|int $autoGenerate = self::AUTOGENERATE_NEVER,
     ) {
-        if (! $proxyDir) {
-            throw ORMInvalidArgumentException::proxyDirectoryRequired();
-        }
+        if (! $em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            if (PHP_VERSION_ID >= 80400) {
+                Deprecation::trigger(
+                    'doctrine/orm',
+                    'https://github.com/doctrine/orm/pull/12005',
+                    'Not enabling native lazy objects is deprecated and will be impossible in Doctrine ORM 4.0.',
+                );
+            }
 
-        if (! $proxyNs) {
-            throw ORMInvalidArgumentException::proxyNamespaceRequired();
+            // @phpstan-ignore function.impossibleType (This method has been removed in Symfony 8)
+            if (! method_exists(ProxyHelper::class, 'generateLazyGhost')) {
+                throw ORMInvalidArgumentException::lazyGhostUnavailable();
+            }
+
+            if (! $proxyDir) {
+                throw ORMInvalidArgumentException::proxyDirectoryRequired();
+            }
+
+            if (! $proxyNs) {
+                throw ORMInvalidArgumentException::proxyNamespaceRequired();
+            }
+        } elseif (PHP_VERSION_ID >= 80400 && func_num_args() > 1) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Passing more than just the EntityManager to the %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
         }
 
         if (is_int($autoGenerate) ? $autoGenerate < 0 || $autoGenerate > 4 : ! is_bool($autoGenerate)) {
             throw ORMInvalidArgumentException::invalidAutoGenerateMode($autoGenerate);
         }
+
+        if ($proxyDir === null && $em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            $proxyDir = '';
+        }
+
+        if ($proxyNs === null && $em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            $proxyNs = '';
+        }
+
+        $this->proxyDir = $proxyDir;
+        $this->proxyNs  = $proxyNs;
 
         $this->uow                 = $em->getUnitOfWork();
         $this->autoGenerate        = (int) $autoGenerate;
@@ -163,8 +207,35 @@ EOPHP;
      * @param class-string $className
      * @param array<mixed> $identifier
      */
-    public function getProxy(string $className, array $identifier): InternalProxy
+    public function getProxy(string $className, array $identifier): object
     {
+        if ($this->em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            $classMetadata       = $this->em->getClassMetadata($className);
+            $entityPersister     = $this->uow->getEntityPersister($className);
+            $identifierFlattener = $this->identifierFlattener;
+
+            $proxy = $classMetadata->reflClass->newLazyGhost(static function (object $object) use (
+                $identifier,
+                $entityPersister,
+                $identifierFlattener,
+                $classMetadata,
+            ): void {
+                $original = $entityPersister->loadById($identifier, $object);
+                if ($original === null) {
+                    throw EntityNotFoundException::fromClassNameAndIdentifier(
+                        $classMetadata->getName(),
+                        $identifierFlattener->flattenIdentifier($classMetadata, $identifier),
+                    );
+                }
+            }, ReflectionClass::SKIP_INITIALIZATION_ON_SERIALIZE);
+
+            foreach ($identifier as $idField => $value) {
+                $classMetadata->propertyAccessors[$idField]->setValue($proxy, $value);
+            }
+
+            return $proxy;
+        }
+
         $proxyFactory = $this->proxyFactories[$className] ?? $this->getProxyFactory($className);
 
         return $proxyFactory($identifier);
@@ -182,6 +253,10 @@ EOPHP;
      */
     public function generateProxyClasses(array $classes, string|null $proxyDir = null): int
     {
+        if ($this->em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            return 0;
+        }
+
         $generated = 0;
 
         foreach ($classes as $class) {
@@ -232,8 +307,8 @@ EOPHP;
 
             $class = $entityPersister->getClassMetadata();
 
-            foreach ($class->getReflectionProperties() as $property) {
-                if (! $property || isset($identifier[$property->getName()]) || ! $class->hasField($property->getName()) && ! $class->hasAssociation($property->getName())) {
+            foreach ($class->getPropertyAccessors() as $name => $property) {
+                if (isset($identifier[$name])) {
                     continue;
                 }
 
@@ -262,7 +337,15 @@ EOPHP;
             foreach ($reflector->getProperties($filter) as $property) {
                 $name = $property->name;
 
-                if ($property->isStatic() || (($class->hasField($name) || $class->hasAssociation($name)) && ! isset($identifiers[$name]))) {
+                if (PHP_VERSION_ID >= 80400 && count($property->getHooks()) > 0) {
+                    throw new LogicException(sprintf(
+                        'Doctrine ORM does not support property hook on %s::%s without using native lazy objects. Check https://github.com/doctrine/orm/issues/11624 for details of versions that support property hooks.',
+                        $property->getDeclaringClass()->getName(),
+                        $property->getName(),
+                    ));
+                }
+
+                if ($property->isStatic() || ! isset($identifiers[$name])) {
                     continue;
                 }
 
@@ -279,7 +362,11 @@ EOPHP;
         $entityPersister  = $this->uow->getEntityPersister($className);
         $initializer      = $this->createLazyInitializer($class, $entityPersister, $this->identifierFlattener);
         $proxyClassName   = $this->loadProxyClass($class);
-        $identifierFields = array_intersect_key($class->getReflectionProperties(), $identifiers);
+        $identifierFields = [];
+
+        foreach (array_keys($identifiers) as $identifier) {
+            $identifierFields[$identifier] = $class->getPropertyAccessor($identifier);
+        }
 
         $proxyFactory = Closure::bind(static function (array $identifier) use ($initializer, $skippedProperties, $identifierFields, $className): InternalProxy {
             $proxy = self::createLazyGhost(static function (InternalProxy $object) use ($initializer, $identifier): void {
@@ -383,6 +470,7 @@ EOPHP;
 
     private function generateUseLazyGhostTrait(ClassMetadata $class): string
     {
+        // @phpstan-ignore staticMethod.notFound (This method has been removed in Symfony 8)
         $code = ProxyHelper::generateLazyGhost($class->getReflectionClass());
         $code = substr($code, 7 + (int) strpos($code, "\n{"));
         $code = substr($code, 0, (int) strpos($code, "\n}"));

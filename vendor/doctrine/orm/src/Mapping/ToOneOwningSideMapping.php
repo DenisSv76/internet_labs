@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Mapping;
 
+use Doctrine\Deprecations\Deprecation;
 use RuntimeException;
 
 use function array_flip;
@@ -27,7 +28,7 @@ abstract class ToOneOwningSideMapping extends OwningSideMapping implements ToOne
 
     /**
      * @param array<string, mixed> $mappingArray
-     * @psalm-param array{
+     * @phpstan-param array{
      *     fieldName: string,
      *     sourceEntity: class-string,
      *     targetEntity: class-string,
@@ -74,7 +75,7 @@ abstract class ToOneOwningSideMapping extends OwningSideMapping implements ToOne
     /**
      * @param mixed[]      $mappingArray
      * @param class-string $name
-     * @psalm-param array{
+     * @phpstan-param array{
      *     fieldName: string,
      *     sourceEntity: class-string,
      *     targetEntity: class-string,
@@ -107,6 +108,10 @@ abstract class ToOneOwningSideMapping extends OwningSideMapping implements ToOne
                 if (empty($joinColumn['name'])) {
                     $mappingArray['joinColumns'][$index]['name'] = $namingStrategy->joinColumnName($mappingArray['fieldName'], $name);
                 }
+
+                if (empty($joinColumn['referencedColumnName'])) {
+                    $mappingArray['joinColumns'][$index]['referencedColumnName'] = $namingStrategy->referenceColumnName();
+                }
             }
         }
 
@@ -126,6 +131,26 @@ abstract class ToOneOwningSideMapping extends OwningSideMapping implements ToOne
         $uniqueConstraintColumns = [];
 
         foreach ($mapping->joinColumns as $joinColumn) {
+            if ($mapping->id) {
+                if ($joinColumn->nullable !== null) {
+                    Deprecation::trigger(
+                        'doctrine/orm',
+                        'https://github.com/doctrine/orm/pull/12126',
+                        <<<'DEPRECATION'
+                        Specifying the "nullable" attribute for join columns in to-one associations (here, %s::$%s) that are part of the identifier is a no-op.
+                        The ORM will always set it to false.
+                        Doing so is deprecated and will be an error in 4.0.
+                        DEPRECATION,
+                        $mapping->sourceEntity,
+                        $mapping->fieldName,
+                    );
+                }
+
+                $joinColumn->nullable = false;
+            } elseif ($joinColumn->nullable === null) {
+                $joinColumn->nullable = true;
+            }
+
             if ($mapping->isOneToOne() && ! $isInheritanceTypeSingleTable) {
                 if (count($mapping->joinColumns) === 1) {
                     if (empty($mapping->id)) {
@@ -190,7 +215,12 @@ abstract class ToOneOwningSideMapping extends OwningSideMapping implements ToOne
 
         $joinColumns = [];
         foreach ($array['joinColumns'] as $column) {
-            $joinColumns[] = (array) $column;
+            $columnArray = (array) $column;
+            if ($this->id) {
+                unset($columnArray['nullable']);
+            }
+
+            $joinColumns[] = $columnArray;
         }
 
         $array['joinColumns'] = $joinColumns;

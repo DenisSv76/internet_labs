@@ -35,14 +35,14 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
      * Map that maps column names to the table names that own them.
      * This is mainly a temporary cache, used during a single request.
      *
-     * @psalm-var array<string, string>
+     * @phpstan-var array<string, string>
      */
     private array $owningTableMap = [];
 
     /**
      * Map of table to quoted table names.
      *
-     * @psalm-var array<string, string>
+     * @phpstan-var array<string, string>
      */
     private array $quotedTableMap = [];
 
@@ -61,7 +61,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
      */
     private function getVersionedClassMetadata(): ClassMetadata
     {
-        if (isset($this->class->fieldMappings[$this->class->versionField]->inherited)) {
+        if ($this->class->versionField !== null && isset($this->class->fieldMappings[$this->class->versionField]->inherited)) {
             $definingClassName = $this->class->fieldMappings[$this->class->versionField]->inherited;
 
             return $this->em->getClassMetadata($definingClassName);
@@ -134,7 +134,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
         // Execute all inserts. For each entity:
         // 1) Insert on root table
         // 2) Insert on sub tables
-        foreach ($this->queuedInserts as $entity) {
+        foreach ($this->queuedInserts as $key => $entity) {
             $insertData = $this->prepareInsertData($entity);
 
             // Execute insert on root table
@@ -179,9 +179,16 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
             if ($this->class->requiresFetchAfterChange) {
                 $this->assignDefaultVersionAndUpsertableValues($entity, $id);
             }
-        }
 
-        $this->queuedInserts = [];
+            // Unset this queued insert, so that the prepareUpdateData() method (called via prepareInsertData() method)
+            // knows right away (for the next entity already) that the current entity has been written to the database
+            // and no extra updates need to be scheduled to refer to it.
+            //
+            // In \Doctrine\ORM\UnitOfWork::executeInserts(), the UoW already removed entities
+            // from its own list (\Doctrine\ORM\UnitOfWork::$entityInsertions) right after they
+            // were given to our addInsert() method.
+            unset($this->queuedInserts[$key]);
+        }
     }
 
     public function update(object $entity): void
@@ -358,7 +365,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
     protected function getSelectColumnsSQL(): string
     {
         // Create the column list fragment only once
-        if ($this->currentPersisterContext->selectColumnListSql !== null) {
+        if ($this->currentPersisterContext->selectColumnListSql !== null && $this->isFilterHashUpToDate()) {
             return $this->currentPersisterContext->selectColumnListSql;
         }
 
@@ -445,6 +452,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
         }
 
         $this->currentPersisterContext->selectColumnListSql = implode(', ', $columnList);
+        $this->updateFilterHash();
 
         return $this->currentPersisterContext->selectColumnListSql;
     }
@@ -459,7 +467,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
             ? $this->class->getIdentifierColumnNames()
             : [];
 
-        foreach ($this->class->reflFields as $name => $field) {
+        foreach ($this->class->propertyAccessors as $name => $field) {
             if (
                 isset($this->class->fieldMappings[$name]->inherited)
                     && ! isset($this->class->fieldMappings[$name]->id)

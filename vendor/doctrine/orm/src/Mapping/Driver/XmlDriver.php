@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Mapping\Driver;
 
-use Doctrine\Common\Collections\Criteria;
-use Doctrine\Common\Collections\Order;
 use Doctrine\ORM\Mapping\Builder\EntityListenerBuilder;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\MappingException;
@@ -18,10 +16,10 @@ use LogicException;
 use SimpleXMLElement;
 
 use function assert;
+use function class_exists;
 use function constant;
 use function count;
 use function defined;
-use function enum_exists;
 use function explode;
 use function extension_loaded;
 use function file_get_contents;
@@ -43,6 +41,8 @@ use function strtoupper;
  */
 class XmlDriver extends FileDriver
 {
+    use LoadMappingFileImplementation;
+
     public const DEFAULT_FILE_EXTENSION = '.dcm.xml';
 
     /**
@@ -135,7 +135,6 @@ class XmlDriver extends FileDriver
                     ];
 
                     if (isset($discrColumn['options'])) {
-                        assert($discrColumn['options'] instanceof SimpleXMLElement);
                         $columnDef['options'] = $this->parseOptions($discrColumn['options']->children());
                     }
 
@@ -408,11 +407,7 @@ class XmlDriver extends FileDriver
                 if (isset($oneToManyElement->{'order-by'})) {
                     $orderBy = [];
                     foreach ($oneToManyElement->{'order-by'}->{'order-by-field'} ?? [] as $orderByField) {
-                        /** @psalm-suppress DeprecatedConstant */
-                        $orderBy[(string) $orderByField['name']] = isset($orderByField['direction'])
-                            ? (string) $orderByField['direction']
-                            // @phpstan-ignore classConstant.deprecated
-                            : (enum_exists(Order::class) ? Order::Ascending->value : Criteria::ASC);
+                        $orderBy[(string) $orderByField['name']] = (string) ($orderByField['direction'] ?? 'ASC');
                     }
 
                     $mapping['orderBy'] = $orderBy;
@@ -538,11 +533,7 @@ class XmlDriver extends FileDriver
                 if (isset($manyToManyElement->{'order-by'})) {
                     $orderBy = [];
                     foreach ($manyToManyElement->{'order-by'}->{'order-by-field'} ?? [] as $orderByField) {
-                        /** @psalm-suppress DeprecatedConstant */
-                        $orderBy[(string) $orderByField['name']] = isset($orderByField['direction'])
-                            ? (string) $orderByField['direction']
-                            // @phpstan-ignore classConstant.deprecated
-                            : (enum_exists(Order::class) ? Order::Ascending->value : Criteria::ASC);
+                        $orderBy[(string) $orderByField['name']] = (string) ($orderByField['direction'] ?? 'ASC');
                     }
 
                     $mapping['orderBy'] = $orderBy;
@@ -666,15 +657,30 @@ class XmlDriver extends FileDriver
      * Parses (nested) option elements.
      *
      * @return mixed[] The options array.
-     * @psalm-return array<int|string, array<int|string, mixed|string>|bool|string>
+     * @phpstan-return array<int|string, array<int|string, mixed|string>|bool|string|object>
      */
     private function parseOptions(SimpleXMLElement|null $options): array
     {
         $array = [];
 
         foreach ($options ?? [] as $option) {
+            $value = null;
             if ($option->count()) {
-                $value = $this->parseOptions($option->children());
+                // Check if this option contains an <object> element
+                $children         = $option->children();
+                $hasObjectElement = false;
+
+                foreach ($children as $child) {
+                    if ($child->getName() === 'object') {
+                        $value            = $this->parseObjectElement($child);
+                        $hasObjectElement = true;
+                        break;
+                    }
+                }
+
+                if (! $hasObjectElement) {
+                    $value = $this->parseOptions($children);
+                }
             } else {
                 $value = (string) $option;
             }
@@ -695,13 +701,40 @@ class XmlDriver extends FileDriver
     }
 
     /**
+     * Parses an <object> element and returns the instantiated object.
+     *
+     * @param SimpleXMLElement $objectElement The XML element.
+     *
+     * @return object The instantiated object.
+     *
+     * @throws MappingException If the object specification is invalid.
+     * @throws InvalidArgumentException If the class does not exist.
+     */
+    private function parseObjectElement(SimpleXMLElement $objectElement): object
+    {
+        $attributes = $objectElement->attributes();
+
+        if (! isset($attributes->class)) {
+            throw MappingException::missingRequiredOption('object', 'class');
+        }
+
+        $className = (string) $attributes->class;
+
+        if (! class_exists($className)) {
+            throw new InvalidArgumentException(sprintf('Class "%s" does not exist', $className));
+        }
+
+        return new $className();
+    }
+
+    /**
      * Constructs a joinColumn mapping array based on the information
      * found in the given SimpleXMLElement.
      *
      * @param SimpleXMLElement $joinColumnElement The XML element.
      *
      * @return mixed[] The mapping array.
-     * @psalm-return array{
+     * @phpstan-return array{
      *                   name: string,
      *                   referencedColumnName: string,
      *                   unique?: bool,
@@ -745,7 +778,7 @@ class XmlDriver extends FileDriver
       * Parses the given field as array.
       *
       * @return mixed[]
-      * @psalm-return array{
+      * @phpstan-return array{
       *                   fieldName: string,
       *                   type?: string,
       *                   columnName?: string,
@@ -754,6 +787,7 @@ class XmlDriver extends FileDriver
       *                   scale?: int,
       *                   unique?: bool,
       *                   nullable?: bool,
+      *                   index?: bool,
       *                   notInsertable?: bool,
       *                   notUpdatable?: bool,
       *                   enumType?: string,
@@ -790,6 +824,10 @@ class XmlDriver extends FileDriver
 
         if (isset($fieldMapping['unique'])) {
             $mapping['unique'] = $this->evaluateBoolean($fieldMapping['unique']);
+        }
+
+        if (isset($fieldMapping['index'])) {
+            $mapping['index'] = $this->evaluateBoolean($fieldMapping['index']);
         }
 
         if (isset($fieldMapping['nullable'])) {
@@ -831,7 +869,7 @@ class XmlDriver extends FileDriver
      * Parse / Normalize the cache configuration
      *
      * @return mixed[]
-     * @psalm-return array{usage: int|null, region?: string}
+     * @phpstan-return array{usage: int|null, region?: string}
      */
     private function cacheToArray(SimpleXMLElement $cacheMapping): array
     {
@@ -858,7 +896,7 @@ class XmlDriver extends FileDriver
      * @param SimpleXMLElement $cascadeElement The cascade element.
      *
      * @return string[] The list of cascade options.
-     * @psalm-return list<string>
+     * @phpstan-return list<string>
      */
     private function getCascadeMappings(SimpleXMLElement $cascadeElement): array
     {
@@ -878,10 +916,8 @@ class XmlDriver extends FileDriver
         return $cascades;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    protected function loadMappingFile($file)
+    /** @return array<class-string, SimpleXMLElement> */
+    private function doLoadMappingFile(string $file): array
     {
         $this->validateMapping($file);
         $result = [];

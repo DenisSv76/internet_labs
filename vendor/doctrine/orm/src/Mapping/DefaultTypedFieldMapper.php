@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doctrine\ORM\Mapping;
 
 use BackedEnum;
+use BcMath\Number;
 use DateInterval;
 use DateTime;
 use DateTimeImmutable;
@@ -20,7 +21,7 @@ use function defined;
 use function enum_exists;
 use function is_a;
 
-/** @psalm-type ScalarName = 'array'|'bool'|'float'|'int'|'string' */
+/** @phpstan-type ScalarName = 'array'|'bool'|'float'|'int'|'string' */
 final class DefaultTypedFieldMapper implements TypedFieldMapper
 {
     /** @var array<class-string|ScalarName, class-string<Type>|string> $typedFieldMappings */
@@ -40,7 +41,12 @@ final class DefaultTypedFieldMapper implements TypedFieldMapper
     /** @param array<class-string|ScalarName, class-string<Type>|string> $typedFieldMappings */
     public function __construct(array $typedFieldMappings = [])
     {
-        $this->typedFieldMappings = array_merge(self::DEFAULT_TYPED_FIELD_MAPPINGS, $typedFieldMappings);
+        $defaultMappings = self::DEFAULT_TYPED_FIELD_MAPPINGS;
+        if (defined(Types::class . '::NUMBER')) { // DBAL 4.3+
+            $defaultMappings[Number::class] = Types::NUMBER;
+        }
+
+        $this->typedFieldMappings = array_merge($defaultMappings, $typedFieldMappings);
     }
 
     /**
@@ -74,8 +80,6 @@ final class DefaultTypedFieldMapper implements TypedFieldMapper
             assert(is_a($type->getName(), BackedEnum::class, true));
             $mapping['enumType'] = $type->getName();
             $type                = $reflection->getBackingType();
-
-            assert($type instanceof ReflectionNamedType);
         }
 
         if (isset($mapping['type'])) {

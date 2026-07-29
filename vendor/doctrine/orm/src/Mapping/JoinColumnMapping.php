@@ -13,6 +13,7 @@ final class JoinColumnMapping implements ArrayAccess
 {
     use ArrayAccessImplementation;
 
+    public bool|null $deferrable         = null;
     public bool|null $unique             = null;
     public bool|null $quoted             = null;
     public string|null $fieldName        = null;
@@ -31,9 +32,9 @@ final class JoinColumnMapping implements ArrayAccess
 
     /**
      * @param array<string, mixed> $mappingArray
-     * @psalm-param array{
+     * @phpstan-param array{
      *     name: string,
-     *     referencedColumnName: string,
+     *     referencedColumnName: string|null,
      *     unique?: bool|null,
      *     quoted?: bool|null,
      *     fieldName?: string|null,
@@ -66,7 +67,7 @@ final class JoinColumnMapping implements ArrayAccess
             }
         }
 
-        foreach (['unique', 'quoted', 'nullable'] as $boolKey) {
+        foreach (['deferrable', 'unique', 'quoted', 'nullable'] as $boolKey) {
             if ($this->$boolKey !== null) {
                 $serialized[] = $boolKey;
             }

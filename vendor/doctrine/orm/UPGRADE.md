@@ -1,10 +1,272 @@
+Note about upgrading: Doctrine uses static and runtime mechanisms to raise
+awareness about deprecated code.
+
+- Use of `@deprecated` docblock that is detected by IDEs (like PHPStorm) or
+  Static Analysis tools (like Psalm, phpstan)
+- Use of our low-overhead runtime deprecation API, details:
+  https://github.com/doctrine/deprecations/
+
+# Upgrade to 3.x General Notes
+
+We recommend you upgrade to DBAL 3 first before upgrading to ORM 3. See
+the DBAL upgrade docs: https://github.com/doctrine/dbal/blob/3.10.x/UPGRADE.md
+
+Rather than doing several major upgrades at once, we recommend you do the following:
+
+- upgrade to DBAL 3
+- deploy and monitor
+- upgrade to ORM 3
+- deploy and monitor
+- upgrade to DBAL 4
+- deploy and monitor
+
+If you are using Symfony, the recommended minimal Doctrine Bundle version is 2.15
+to run with ORM 3.
+
+At this point, we recommend upgrading to PHP 8.4 first and then directly from
+ORM 2.19 to 3.5 and up so that you can skip the lazy ghost proxy generation
+and directly start using native lazy objects.
+
+# Upgrade to 3.6
+
+## Deprecate using string expression for default values in mappings
+
+Using a string expression for default values in field mappings is deprecated.
+Use `Doctrine\DBAL\Schema\DefaultExpression` instances instead.
+
+Here is how to address this deprecation when mapping entities using PHP attributes:
+
+```diff
+ use DateTime;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentDate;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentTime;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp;
+ use Doctrine\ORM\Mapping as ORM;
+
+ #[ORM\Entity]
+ final class TimeEntity
+ {
+     #[ORM\Id]
+     #[ORM\Column]
+     public int $id;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_TIMESTAMP'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentTimestamp()], insertable: false, updatable: false)]
+     public DateTime $createdAt;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_TIME'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentTime()], insertable: false, updatable: false)]
+     public DateTime $createdTime;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_DATE'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentDate()], insertable: false, updatable: false)]
+     public DateTime $createdDate;
+ }
+```
+
+Here is how to do the same when mapping entities using XML:
+
+```diff
+ <?xml version="1.0" encoding="UTF-8"?>
+
+ <doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping
+                           https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+
+     <entity name="Doctrine\Tests\ORM\Functional\XmlTimeEntity">
+         <id name="id" type="integer" column="id">
+             <generator strategy="AUTO"/>
+         </id>
+
+         <field name="createdAt" type="datetime" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIMESTAMP</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp"/>
++                </option>
+             </options>
+         </field>
+
+         <field name="createdAtImmutable" type="datetime_immutable" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIMESTAMP</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp"/>
++                </option>
+             </options>
+         </field>
+
+         <field name="createdTime" type="time" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIME</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTime"/>
++                </option>
+             </options>
+         </field>
+         <field name="createdDate" type="date" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_DATE</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentDate"/>
++                </option>
+             </options>
+         </field>
+     </entity>
+ </doctrine-mapping>
+```
+
+
+## Deprecate `FieldMapping::$default`
+
+The `default` property of `Doctrine\ORM\Mapping\FieldMapping` is deprecated and
+will be removed in 4.0. Instead, use `FieldMapping::$options['default']`.
+
+## Deprecate specifying `nullable` on columns that end up being used in a primary key
+
+Specifying `nullable` on join columns that are part of a primary key is
+deprecated and will be an error in 4.0.
+
+This can happen when using a join column mapping together with an id mapping,
+or when using a join column mapping or an inverse join column mapping on a
+many-to-many relationship.
+
+```diff
+ class User
+ {
+     #[ORM\Id]
+     #[ORM\Column(type: 'integer')]
+     private int $id;
+
+     #[ORM\Id]
+     #[ORM\ManyToOne(targetEntity: Family::class, inversedBy: 'users')]
+-    #[ORM\JoinColumn(name: 'family_id', referencedColumnName: 'id', nullable: true)]
++    #[ORM\JoinColumn(name: 'family_id', referencedColumnName: 'id')]
+     private ?Family $family;
+
+     #[ORM\ManyToMany(targetEntity: Group::class)]
+     #[ORM\JoinTable(name: 'user_group')]
+-    #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true)]
+-    #[ORM\InverseJoinColumn(name: 'group_id', referencedColumnName: 'id', nullable: true)]
++    #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id')]
++    #[ORM\InverseJoinColumn(name: 'group_id', referencedColumnName: 'id')]
+     private Collection $groups;
+ }
+```
+
+## Deprecate `Doctrine\ORM\QueryBuilder::add('join', ...)` with a list of join parts
+
+Using `Doctrine\ORM\QueryBuilder::add('join', ...)` with a list of join parts
+is deprecated in favor of using an associative array of join parts with the
+root alias as key.
+
+## Deprecate using the `WITH` keyword for arbitrary DQL joins
+
+Using the `WITH` keyword to specify the condition for an arbitrary DQL join is
+deprecated in favor of using the `ON` keyword (similar to the SQL syntax for
+joins).
+The `WITH` keyword is now meant to be used only for filtering conditions in
+association joins.
+
+# Upgrade to 3.5
+
+See the General notes to upgrading to 3.x versions above.
+
+## Deprecate not using native lazy objects on PHP 8.4+
+
+Having native lazy objects disabled on PHP 8.4+ is deprecated and will not be
+possible in 4.0.
+
+You can enable them through configuration:
+
+```php
+$config->enableNativeLazyObjects(true);
+```
+
+As a consequence, methods, parameters and commands related to userland lazy
+objects have been deprecated on PHP 8.4+:
+
+- `Doctrine\ORM\Tools\Console\Command\GenerateProxiesCommand`
+- `Doctrine\ORM\Configuration::getAutoGenerateProxyClasses()`
+- `Doctrine\ORM\Configuration::getProxyDir()`
+- `Doctrine\ORM\Configuration::getProxyNamespace()`
+- `Doctrine\ORM\Configuration::setAutoGenerateProxyClasses()`
+- `Doctrine\ORM\Configuration::setProxyDir()`
+- `Doctrine\ORM\Configuration::setProxyNamespace()`
+- Passing more than one argument to `Doctrine\ORM\Proxy\ProxyFactory::__construct()`
+
+Additionally, some methods of ORMSetup have been deprecated in favor of a new
+counterpart.
+
+- `Doctrine\ORM\ORMSetup::createAttributeMetadataConfiguration()` is deprecated in favor of
+  `Doctrine\ORM\ORMSetup::createAttributeMetadataConfig()`
+- `Doctrine\ORM\ORMSetup::createXMLMetadataConfiguration()` is deprecated in favor of
+  `Doctrine\ORM\ORMSetup::createXMLMetadataConfig()`
+- `Doctrine\ORM\ORMSetup::createConfiguration()` is deprecated in favor of
+  `Doctrine\ORM\ORMSetup::createConfig()`
+
+## Deprecate methods for configuring no longer configurable features
+
+Since 3.0, lazy ghosts are enabled unconditionally, and so is rejecting ID
+collisions in the identity map.
+
+As a consequence, the following methods are deprecated and will be removed in 4.0:
+* `Doctrine\ORM\Configuration::setLazyGhostObjectEnabled()`
+* `Doctrine\ORM\Configuration::isLazyGhostObjectEnabled()`
+* `Doctrine\ORM\Configuration::setRejectIdCollisionInIdentityMap()`
+* `Doctrine\ORM\Configuration::isRejectIdCollisionInIdentityMapEnabled()`
+
+# Upgrade to 3.4.1
+
+## BC BREAK: You can no longer use the `.*` notation to get all fields of an entity in a DTO
+
+This feature was introduced in 3.4.0, and introduces several issues, so we
+decide to remove it before it is used too widely.
+
+# Upgrade to 3.4
+
+See the General notes to upgrading to 3.x versions above.
+
+## Discriminator Map class duplicates
+
+Using the same class several times in a discriminator map is deprecated.
+In 4.0, this will be an error.
+
+## `Doctrine\ORM\Mapping\ClassMetadata::$reflFields` deprecated
+
+To better support property hooks and lazy proxies in the future, `$reflFields` had to
+be deprecated because we cannot use the PHP internal reflection API directly anymore.
+
+The property was changed from an array to an object of type `LegacyReflectionFields`
+that implements `ArrayAccess`.
+
+Use the new `Doctrine\ORM\Mapping\PropertyAccessors\PropertyAccessor` API and access
+through `Doctrine\ORM\Mapping\ClassMetadata::$propertyAccessors` instead.
+
+Companion accessor methods are deprecated as well.
+
 # Upgrade to 3.3
+
+See the General notes to upgrading to 3.x versions above.
 
 ## Deprecate `DatabaseDriver`
 
 The class `Doctrine\ORM\Mapping\Driver\DatabaseDriver` is deprecated without replacement.
 
+## Add `Doctrine\ORM\Query\OutputWalker` interface, deprecate `Doctrine\ORM\Query\SqlWalker::getExecutor()`
+
+Output walkers should implement the new `\Doctrine\ORM\Query\OutputWalker` interface and create
+`Doctrine\ORM\Query\Exec\SqlFinalizer` instances instead of `Doctrine\ORM\Query\Exec\AbstractSqlExecutor`s.
+The output walker must not base its workings on the query `firstResult`/`maxResult` values, so that the
+`SqlFinalizer` can be kept in the query cache and used regardless of the actual `firstResult`/`maxResult` values.
+Any operation dependent on `firstResult`/`maxResult` should take place within the `SqlFinalizer::createExecutor()`
+method. Details can be found at https://github.com/doctrine/orm/pull/11188.
+
+
 # Upgrade to 3.2
+
+See the General notes to upgrading to 3.x versions above.
 
 ## Deprecate the `NotSupported` exception
 
@@ -32,6 +294,8 @@ using the `\Doctrine\ORM\Mapping\UniqueConstraint` and `\Doctrine\ORM\Mapping\In
 
 # Upgrade to 3.1
 
+See the General notes to upgrading to 3.x versions above.
+
 ## Deprecate `Doctrine\ORM\Mapping\ReflectionEnumProperty`
 
 This class is deprecated and will be removed in 4.0.
@@ -54,6 +318,8 @@ Using array access on instances of the following classes is deprecated:
 - `Doctrine\ORM\Mapping\JoinTableMapping`
 
 # Upgrade to 3.0
+
+See the General notes to upgrading to 3.x versions above.
 
 ## BC BREAK: Calling `ClassMetadata::getAssociationMappedByTargetField()` with the owning side of an association now throws an exception
 
@@ -80,6 +346,9 @@ so `$targetEntity` is a first argument now. This change affects only non-named a
 When using the `AUTO` strategy to let Doctrine determine the identity generation mechanism for
 an entity, and when using `doctrine/dbal` 4, PostgreSQL now uses `IDENTITY`
 instead of `SEQUENCE` or `SERIAL`.
+
+There are three ways to handle this change.
+
 * If you want to upgrade your existing tables to identity columns, you will need to follow [migration to identity columns on PostgreSQL](https://www.doctrine-project.org/projects/doctrine-dbal/en/4.0/how-to/postgresql-identity-migration.html)
 * If you want to keep using SQL sequences, you need to configure the ORM this way:
 ```php
@@ -92,6 +361,27 @@ $configuration->setIdentityGenerationPreferences([
     PostgreSQLPlatform::CLASS => ClassMetadata::GENERATOR_TYPE_SEQUENCE,
 ]);
 ```
+* You can change individual entities to use the `SEQUENCE` strategy instead of `AUTO`:
+```php
+
+diff --git a/src/Entity/Example.php b/src/Entity/Example.php
+index 28be8df378..3b7d61bda6 100644
+--- a/src/Entity/Example.php
++++ b/src/Entity/Example.php
+@@ -38,7 +38,7 @@ class Example
+
+     #[ORM\Id]
+     #[ORM\Column(type: 'integer')]
+-    #[ORM\GeneratedValue(strategy: 'AUTO')]
++    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
+     private int $id;
+
+     #[Assert\Length(max: 255)]
+```
+The later two options require a small database migration that will remove the default
+expression fetching the next value from the sequence. It's not strictly necessary to
+do this migration because the code will work anyway. A benefit of this approach is
+that you can just make and roll out the code changes first and then migrate the database later.
 
 ## BC BREAK: Throw exceptions when using illegal attributes on Embeddable
 
@@ -108,6 +398,36 @@ WARNING: This was relaxed in ORM 3.2 when partial was re-allowed for array-hydra
 - `Doctrine\ORM\Query\SqlWalker::HINT_PARTIAL` (reintroduced in ORM 3.2) and
   `Doctrine\ORM\Query::HINT_FORCE_PARTIAL_LOAD` are removed.
 - `Doctrine\ORM\EntityManager*::getPartialReference()` is removed.
+
+## BC BREAK: Enforce ArrayCollection Type on `\Doctrine\ORM\QueryBuilder::setParameters(ArrayCollection $parameters)`
+
+The argument $parameters can no longer be a key=>value array. Only ArrayCollection types are allowed.
+
+### Before
+
+```php
+$qb = $em->createQueryBuilder()
+    ->select('u')
+    ->from('User', 'u')
+    ->where('u.id = :user_id1 OR u.id = :user_id2')
+    ->setParameters(array(
+        'user_id1' => 1,
+        'user_id2' => 2
+    ));
+```
+
+### After
+
+```php
+$qb = $em->createQueryBuilder()
+    ->select('u')
+    ->from('User', 'u')
+    ->where('u.id = :user_id1 OR u.id = :user_id2')
+    ->setParameters(new ArrayCollection(array(
+        new Parameter('user_id1', 1),
+        new Parameter('user_id2', 2)
+    )));
+```
 
 ## BC BREAK: `Doctrine\ORM\Persister\Entity\EntityPersister::executeInserts()` return type changed to `void`
 
@@ -737,7 +1057,7 @@ Use `toIterable()` instead.
 
 Output walkers should implement the new `\Doctrine\ORM\Query\OutputWalker` interface and create
 `Doctrine\ORM\Query\Exec\SqlFinalizer` instances instead of `Doctrine\ORM\Query\Exec\AbstractSqlExecutor`s.
-The output walker must not base its workings on the query `firstResult`/`maxResult` values, so that the 
+The output walker must not base its workings on the query `firstResult`/`maxResult` values, so that the
 `SqlFinalizer` can be kept in the query cache and used regardless of the actual `firstResult`/`maxResult` values.
 Any operation dependent on `firstResult`/`maxResult` should take place within the `SqlFinalizer::createExecutor()`
 method. Details can be found at https://github.com/doctrine/orm/pull/11188.
@@ -750,7 +1070,7 @@ change in behavior.
 
 Progress on this is tracked at https://github.com/doctrine/orm/issues/11624 .
 
-## PARTIAL DQL syntax is undeprecated 
+## PARTIAL DQL syntax is undeprecated
 
 Use of the PARTIAL keyword is not deprecated anymore in DQL, because we will be
 able to support PARTIAL objects with PHP 8.4 Lazy Objects and
@@ -1981,7 +2301,7 @@ from 2.0 have to configure the annotation driver if they don't use `Configuratio
 
 ## Scalar mappings can now be omitted from DQL result
 
-You are now allowed to mark scalar SELECT expressions as HIDDEN an they are not hydrated anymore.
+You are now allowed to mark scalar SELECT expressions as HIDDEN and they are not hydrated anymore.
 Example:
 
 SELECT u, SUM(a.id) AS HIDDEN numArticles FROM User u LEFT JOIN u.Articles a ORDER BY numArticles DESC HAVING numArticles > 10

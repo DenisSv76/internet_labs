@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Query;
 
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Exec\AbstractSqlExecutor;
 use Doctrine\ORM\Query\Exec\SqlFinalizer;
@@ -37,7 +38,7 @@ class ParserResult
     /**
      * The mappings of DQL parameter names/positions to SQL parameter positions.
      *
-     * @psalm-var array<string|int, list<int>>
+     * @phpstan-var array<string|int, list<int>>
      */
     private array $parameterMappings = [];
 
@@ -71,20 +72,36 @@ class ParserResult
     /**
      * Sets the SQL executor that should be used for this ParserResult.
      *
-     * @deprecated
+     * @deprecated The SqlExecutor will be removed from ParserResult in 4.0. Provide a SqlFinalizer instead that can create the executor.
      */
     public function setSqlExecutor(AbstractSqlExecutor $executor): void
     {
+        Deprecation::trigger(
+            'doctrine/orm',
+            'https://github.com/doctrine/orm/pull/11188',
+            'The SqlExecutor will be removed from %s in 4.0. Provide a %s instead that can create the executor.',
+            self::class,
+            SqlFinalizer::class,
+        );
+
         $this->sqlExecutor = $executor;
     }
 
     /**
      * Gets the SQL executor used by this ParserResult.
      *
-     * @deprecated
+     * @deprecated The SqlExecutor will be removed from ParserResult in 4.0. Provide a SqlFinalizer instead that can create the executor.
      */
     public function getSqlExecutor(): AbstractSqlExecutor
     {
+        Deprecation::trigger(
+            'doctrine/orm',
+            'https://github.com/doctrine/orm/pull/11188',
+            'The SqlExecutor will be removed from %s in 4.0. Provide a %s instead that can create the executor.',
+            self::class,
+            SqlFinalizer::class,
+        );
+
         if ($this->sqlExecutor === null) {
             throw new LogicException(sprintf(
                 'Executor not set yet. Call %s::setSqlExecutor() first.',
@@ -125,7 +142,7 @@ class ParserResult
     /**
      * Gets all DQL to SQL parameter mappings.
      *
-     * @psalm-return array<int|string, list<int>> The parameter mappings.
+     * @phpstan-return array<int|string, list<int>> The parameter mappings.
      */
     public function getParameterMappings(): array
     {
@@ -138,7 +155,7 @@ class ParserResult
      * @param string|int $dqlPosition The name or position of the DQL parameter.
      *
      * @return int[] The positions of the corresponding SQL parameters.
-     * @psalm-return list<int>
+     * @phpstan-return list<int>
      */
     public function getSqlParameterPositions(string|int $dqlPosition): array
     {

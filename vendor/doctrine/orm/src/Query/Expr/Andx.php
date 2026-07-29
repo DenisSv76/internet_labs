@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Query\Expr;
 
+use Stringable;
+
 /**
  * Expression class for building DQL and parts.
  *
@@ -13,7 +15,7 @@ class Andx extends Composite
 {
     protected string $separator = ' AND ';
 
-    /** @var string[] */
+    /** @var list<class-string<Stringable>> */
     protected array $allowedClasses = [
         Comparison::class,
         Func::class,
@@ -21,10 +23,10 @@ class Andx extends Composite
         self::class,
     ];
 
-    /** @psalm-var list<string|Comparison|Func|Orx|self> */
+    /** @phpstan-var list<string|Comparison|Func|Orx|self> */
     protected array $parts = [];
 
-    /** @psalm-return list<string|Comparison|Func|Orx|self> */
+    /** @phpstan-return list<string|Comparison|Func|Orx|self> */
     public function getParts(): array
     {
         return $this->parts;

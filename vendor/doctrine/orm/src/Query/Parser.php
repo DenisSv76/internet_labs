@@ -40,8 +40,8 @@ use function trim;
  * An LL(*) recursive-descent parser for the context-free grammar of the Doctrine Query Language.
  * Parses a DQL query, reports any errors in it, and generates an AST.
  *
- * @psalm-type DqlToken = Token<TokenType, string>
- * @psalm-type QueryComponent = array{
+ * @phpstan-type DqlToken = Token<TokenType, string>
+ * @phpstan-type QueryComponent = array{
  *                 metadata?: ClassMetadata<object>,
  *                 parent?: string|null,
  *                 relation?: AssociationMapping|null,
@@ -106,19 +106,19 @@ final class Parser
      * and still need to be validated.
      */
 
-    /** @psalm-var list<array{token: DqlToken|null, expression: mixed, nestingLevel: int}> */
+    /** @phpstan-var list<array{token: DqlToken|null, expression: mixed, nestingLevel: int}> */
     private array $deferredIdentificationVariables = [];
 
-    /** @psalm-var list<array{token: DqlToken|null, expression: AST\PartialObjectExpression, nestingLevel: int}> */
+    /** @phpstan-var list<array{token: DqlToken|null, expression: AST\PartialObjectExpression, nestingLevel: int}> */
     private array $deferredPartialObjectExpressions = [];
 
-    /** @psalm-var list<array{token: DqlToken|null, expression: AST\PathExpression, nestingLevel: int}> */
+    /** @phpstan-var list<array{token: DqlToken|null, expression: AST\PathExpression, nestingLevel: int}> */
     private array $deferredPathExpressions = [];
 
-    /** @psalm-var list<array{token: DqlToken|null, expression: mixed, nestingLevel: int}> */
+    /** @phpstan-var list<array{token: DqlToken|null, expression: mixed, nestingLevel: int}> */
     private array $deferredResultVariables = [];
 
-    /** @psalm-var list<array{token: DqlToken|null, expression: AST\NewObjectExpression, nestingLevel: int}> */
+    /** @phpstan-var list<array{token: DqlToken|null, expression: AST\NewObjectExpression, nestingLevel: int}> */
     private array $deferredNewObjectExpressions = [];
 
     /**
@@ -139,7 +139,7 @@ final class Parser
     /**
      * Map of declared query components in the parsed query.
      *
-     * @psalm-var array<string, QueryComponent>
+     * @phpstan-var array<string, QueryComponent>
      */
     private array $queryComponents = [];
 
@@ -147,6 +147,11 @@ final class Parser
      * Keeps the nesting level of defined ResultVariables.
      */
     private int $nestingLevel = 0;
+
+    /**
+     * Keeps the nesting level of subqueries in JOIN WITH conditions.
+     */
+    private int $withJoinConditionNestingLevel = 0;
 
     /**
      * Any additional custom tree walkers that modify the AST.
@@ -162,7 +167,7 @@ final class Parser
      */
     private $customOutputWalker;
 
-    /** @psalm-var array<string, AST\SelectExpression> */
+    /** @phpstan-var array<string, AST\SelectExpression> */
     private array $identVariableExpressions = [];
 
     /**
@@ -436,7 +441,7 @@ final class Parser
      * Generates a new semantical error.
      *
      * @param string $message Optional message.
-     * @psalm-param DqlToken|null $token
+     * @phpstan-param DqlToken|null $token
      *
      * @throws QueryException
      */
@@ -470,7 +475,7 @@ final class Parser
      *
      * @param bool $resetPeek Reset peek after finding the closing parenthesis.
      *
-     * @psalm-return DqlToken|null
+     * @phpstan-return DqlToken|null
      */
     private function peekBeyondClosingParenthesis(bool $resetPeek = true): Token|null
     {
@@ -504,7 +509,7 @@ final class Parser
     /**
      * Checks if the given token indicates a mathematical operator.
      *
-     * @psalm-param DqlToken|null $token
+     * @phpstan-param DqlToken|null $token
      */
     private function isMathOperator(Token|null $token): bool
     {
@@ -1026,7 +1031,7 @@ final class Parser
      *
      * PathExpression ::= IdentificationVariable {"." identifier}*
      *
-     * @psalm-param int-mask-of<AST\PathExpression::TYPE_*> $expectedTypes
+     * @phpstan-param int-mask-of<AST\PathExpression::TYPE_*> $expectedTypes
      */
     public function PathExpression(int $expectedTypes): AST\PathExpression
     {
@@ -1104,6 +1109,50 @@ final class Parser
     public function CollectionValuedPathExpression(): AST\PathExpression
     {
         return $this->PathExpression(AST\PathExpression::TYPE_COLLECTION_VALUED_ASSOCIATION);
+    }
+
+    /**
+     * EntityAsDtoArgumentExpression ::= IdentificationVariable
+     */
+    public function EntityAsDtoArgumentExpression(): AST\EntityAsDtoArgumentExpression
+    {
+        assert($this->lexer->lookahead !== null);
+        $expression    = null;
+        $identVariable = null;
+        $peek          = $this->lexer->glimpse();
+        $lookaheadType = $this->lexer->lookahead->type;
+        assert($peek !== null);
+
+        assert($lookaheadType === TokenType::T_IDENTIFIER);
+        assert($peek->type !== TokenType::T_DOT);
+        assert($peek->type !== TokenType::T_OPEN_PARENTHESIS);
+
+        $expression = $identVariable = $this->IdentificationVariable();
+
+        // [["AS"] AliasResultVariable]
+        $mustHaveAliasResultVariable = false;
+
+        if ($this->lexer->isNextToken(TokenType::T_AS)) {
+            $this->match(TokenType::T_AS);
+
+            $mustHaveAliasResultVariable = true;
+        }
+
+        $aliasResultVariable = null;
+
+        if ($mustHaveAliasResultVariable || $this->lexer->isNextToken(TokenType::T_IDENTIFIER)) {
+            $token               = $this->lexer->lookahead;
+            $aliasResultVariable = $this->AliasResultVariable();
+
+            // Include AliasResultVariable in query components.
+            $this->queryComponents[$aliasResultVariable] = [
+                'resultVariable' => $expression,
+                'nestingLevel'   => $this->nestingLevel,
+                'token'          => $token,
+            ];
+        }
+
+        return new AST\EntityAsDtoArgumentExpression($expression, $identVariable, $aliasResultVariable);
     }
 
     /**
@@ -1340,7 +1389,7 @@ final class Parser
             $orderByItems[] = $this->OrderByItem();
         }
 
-        return new AST\OrderByClause($orderByItems);
+        return new AST\OrderByClause($orderByItems, $this->withJoinConditionNestingLevel === 0);
     }
 
     /**
@@ -1420,7 +1469,7 @@ final class Parser
 
         assert($this->lexer->lookahead !== null);
         $expr = match (true) {
-            $this->isMathOperator($peek) => $this->SimpleArithmeticExpression(),
+            $this->isMathOperator($peek) || $this->isMathOperator($glimpse) => $this->SimpleArithmeticExpression(),
             $glimpse !== null && $glimpse->type === TokenType::T_DOT => $this->SingleValuedPathExpression(),
             $this->lexer->peek() && $this->isMathOperator($this->peekBeyondClosingParenthesis()) => $this->ScalarExpression(),
             $this->lexer->lookahead->type === TokenType::T_CASE => $this->CaseExpression(),
@@ -1565,8 +1614,7 @@ final class Parser
 
     /**
      * Join ::= ["LEFT" ["OUTER"] | "INNER"] "JOIN"
-     *          (JoinAssociationDeclaration | RangeVariableDeclaration)
-     *          ["WITH" ConditionalExpression]
+     *          (JoinAssociationDeclaration ["WITH" ConditionalExpression] | RangeVariableDeclaration [("ON" | "WITH") ConditionalExpression])
      */
     public function Join(): AST\Join
     {
@@ -1600,21 +1648,38 @@ final class Parser
 
         $next = $this->lexer->glimpse();
         assert($next !== null);
-        $joinDeclaration = $next->type === TokenType::T_DOT ? $this->JoinAssociationDeclaration() : $this->RangeVariableDeclaration();
-        $adhocConditions = $this->lexer->isNextToken(TokenType::T_WITH);
-        $join            = new AST\Join($joinType, $joinDeclaration);
+        $conditionalExpression = null;
 
-        // Describe non-root join declaration
-        if ($joinDeclaration instanceof AST\RangeVariableDeclaration) {
+        if ($next->type === TokenType::T_DOT) {
+            $joinDeclaration = $this->JoinAssociationDeclaration();
+
+            if ($this->lexer->isNextToken(TokenType::T_WITH)) {
+                $this->match(TokenType::T_WITH);
+
+                try {
+                    $this->withJoinConditionNestingLevel++;
+
+                    $conditionalExpression = $this->ConditionalExpression();
+                } finally {
+                    $this->withJoinConditionNestingLevel--;
+                }
+            }
+        } else {
+            $joinDeclaration         = $this->RangeVariableDeclaration();
             $joinDeclaration->isRoot = false;
+
+            if ($this->lexer->isNextToken(TokenType::T_ON)) {
+                $this->match(TokenType::T_ON);
+                $conditionalExpression = $this->ConditionalExpression();
+            } elseif ($this->lexer->isNextToken(TokenType::T_WITH)) {
+                $this->match(TokenType::T_WITH);
+                $conditionalExpression = $this->ConditionalExpression();
+                Deprecation::trigger('doctrine/orm', 'https://github.com/doctrine/orm/issues/12192', 'Using WITH for the join condition of arbitrary joins is deprecated. Use ON instead.');
+            }
         }
 
-        // Check for ad-hoc Join conditions
-        if ($adhocConditions) {
-            $this->match(TokenType::T_WITH);
-
-            $join->conditionalExpression = $this->ConditionalExpression();
-        }
+        $join                        = new AST\Join($joinType, $joinDeclaration);
+        $join->conditionalExpression = $conditionalExpression;
 
         return $join;
     }
@@ -1767,6 +1832,7 @@ final class Parser
             $useNamedArguments = true;
         }
 
+        /** @var class-string $className */
         $className = $this->AbstractSchemaName(); // note that this is not yet validated
         $token     = $this->lexer->token;
 
@@ -1848,13 +1914,20 @@ final class Parser
             $this->match(TokenType::T_CLOSE_PARENTHESIS);
         } elseif ($token->type === TokenType::T_NEW) {
             $expression = $this->NewObjectExpression();
+        } elseif ($token->type === TokenType::T_IDENTIFIER && $peek->type !== TokenType::T_DOT && $peek->type !== TokenType::T_OPEN_PARENTHESIS) {
+            $expression = $this->EntityAsDtoArgumentExpression();
+            $fieldAlias = $expression->aliasVariable;
         } else {
             $expression = $this->ScalarExpression();
         }
 
         if ($this->lexer->isNextToken(TokenType::T_AS)) {
             $this->match(TokenType::T_AS);
-            $fieldAlias = $this->AliasIdentificationVariable();
+            $this->match(TokenType::T_IDENTIFIER);
+
+            assert($this->lexer->token !== null);
+
+            $fieldAlias = $this->lexer->token->value;
         }
 
         return $expression;
@@ -1876,7 +1949,7 @@ final class Parser
     }
 
     /**
-     * ScalarExpression ::= SimpleArithmeticExpression | StringPrimary | DateTimePrimary |
+     * ScalarExpression ::= SimpleArithmeticExpression | StringPrimary | DatetimePrimary |
      *                      StateFieldPathExpression | BooleanPrimary | CaseExpression |
      *                      InstanceOfExpression
      *
@@ -1950,14 +2023,14 @@ final class Parser
     }
 
     /**
-     * CaseExpression ::= GeneralCaseExpression | SimpleCaseExpression | CoalesceExpression | NullifExpression
+     * CaseExpression ::= GeneralCaseExpression | SimpleCaseExpression | CoalesceExpression | NullIfExpression
      * GeneralCaseExpression ::= "CASE" WhenClause {WhenClause}* "ELSE" ScalarExpression "END"
      * WhenClause ::= "WHEN" ConditionalExpression "THEN" ScalarExpression
      * SimpleCaseExpression ::= "CASE" CaseOperand SimpleWhenClause {SimpleWhenClause}* "ELSE" ScalarExpression "END"
-     * CaseOperand ::= StateFieldPathExpression | TypeDiscriminator
+     * CaseOperand ::= StateFieldPathExpression
      * SimpleWhenClause ::= "WHEN" ScalarExpression "THEN" ScalarExpression
      * CoalesceExpression ::= "COALESCE" "(" ScalarExpression {"," ScalarExpression}* ")"
-     * NullifExpression ::= "NULLIF" "(" ScalarExpression "," ScalarExpression ")"
+     * NullIfExpression ::= "NULLIF" "(" ScalarExpression "," ScalarExpression ")"
      *
      * @return mixed One of the possible expressions or subexpressions.
      */
@@ -2055,7 +2128,7 @@ final class Parser
 
     /**
      * SimpleCaseExpression ::= "CASE" CaseOperand SimpleWhenClause {SimpleWhenClause}* "ELSE" ScalarExpression "END"
-     * CaseOperand ::= StateFieldPathExpression | TypeDiscriminator
+     * CaseOperand ::= StateFieldPathExpression
      */
     public function SimpleCaseExpression(): AST\SimpleCaseExpression
     {
@@ -3361,9 +3434,12 @@ final class Parser
 
         assert($functionClass !== null);
 
-        $function = is_string($functionClass)
-            ? new $functionClass($functionName)
-            : $functionClass($functionName);
+        if (is_string($functionClass)) {
+            $function = new $functionClass($functionName);
+            assert($function instanceof AST\Functions\FunctionNode);
+        } else {
+            $function = $functionClass($functionName);
+        }
 
         $function->parse($this);
 
@@ -3371,7 +3447,7 @@ final class Parser
     }
 
     /**
-     * FunctionsReturningDateTime ::=
+     * FunctionsReturningDatetime ::=
      *     "CURRENT_DATE" |
      *     "CURRENT_TIME" |
      *     "CURRENT_TIMESTAMP" |

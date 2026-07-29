@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Query\Expr;
 
+use Stringable;
+
 /**
  * Expression class for building DQL select statements.
  *
@@ -14,13 +16,13 @@ class Select extends Base
     protected string $preSeparator  = '';
     protected string $postSeparator = '';
 
-    /** @var string[] */
+    /** @var list<class-string<Stringable>> */
     protected array $allowedClasses = [Func::class];
 
-    /** @psalm-var list<string|Func> */
+    /** @phpstan-var list<string|Func> */
     protected array $parts = [];
 
-    /** @psalm-return list<string|Func> */
+    /** @phpstan-return list<string|Func> */
     public function getParts(): array
     {
         return $this->parts;

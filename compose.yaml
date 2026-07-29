@@ -1,13 +1,16 @@
 services:
   php:
-    image: ${IMAGES_PREFIX:-}app-php
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myproject/app-php:local
     restart: unless-stopped
     environment:
       SERVER_NAME: ${SERVER_NAME:-localhost}, php:80
       MERCURE_PUBLISHER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
       MERCURE_SUBSCRIBER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
       # Run "composer require symfony/orm-pack" to install and configure Doctrine ORM
-      DATABASE_URL: mysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-user}@database:3306/${MYSQL_DATABASE:-inzhir_chat}?serverVersion=${MYSQL_VERSION:-8}&charset=${MYSQL_CHARSET:-utf8mb4}
+      DATABASE_URL: mysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-user}@database:3306/${MYSQL_DATABASE:-landing}?serverVersion=${MYSQL_VERSION:-8}&charset=${MYSQL_CHARSET:-utf8mb4}
       # Run "composer require symfony/mercure-bundle" to install and configure the Mercure integration
       MERCURE_URL: ${CADDY_MERCURE_URL:-http://php/.well-known/mercure}
       MERCURE_PUBLIC_URL: $${CADDY_MERCURE_PUBLIC_URL:-https://$${SERVER_NAME:-localhost}/.well-known/mercure}
@@ -40,7 +43,7 @@ services:
   database:
     image: mysql:${MYSQL_VERSION:-8}
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-inzhir_chat}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-landing}
         # You should definitely change the password in production
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-user}
@@ -57,6 +60,19 @@ services:
       # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
       # - ./docker/db/data:/var/lib/postgresql/data:rw
 ###< doctrine/doctrine-bundle ###
+
+  worker:
+    image: myproject/app-php:local
+    restart: unless-stopped
+    command: php bin/console messenger:consume async --time-limit=3600 --memory-limit=256M
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-user}@database:3306/${MYSQL_DATABASE:-landing}?serverVersion=${MYSQL_VERSION:-8}&charset=${MYSQL_CHARSET:-utf8mb4}
+      MAILER_DSN: ${MAILER_DSN}
+      MY_EMAIL: ${MY_EMAIL}
+    volumes:
+      - ./:/app
+    depends_on:
+      - database
 
 volumes:
   caddy_data:

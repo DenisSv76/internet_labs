@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doctrine\ORM;
 
 use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\Cache\CacheConfiguration;
 use Doctrine\ORM\Exception\InvalidEntityRepository;
 use Doctrine\ORM\Internal\Hydration\AbstractHydrator;
@@ -30,6 +31,8 @@ use function class_exists;
 use function is_a;
 use function strtolower;
 
+use const PHP_VERSION_ID;
+
 /**
  * Configuration container for all configuration options of Doctrine.
  * It combines all configuration options from DBAL & ORM.
@@ -41,16 +44,16 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /** @var mixed[] */
     protected array $attributes = [];
 
-    /** @psalm-var array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> */
+    /** @phpstan-var array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> */
     private $identityGenerationPreferences = [];
 
-    /** @psalm-param array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> $value */
+    /** @phpstan-param array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> $value */
     public function setIdentityGenerationPreferences(array $value): void
     {
         $this->identityGenerationPreferences = $value;
     }
 
-    /** @psalm-return array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> $value */
+    /** @phpstan-return array<class-string<AbstractPlatform>, ClassMetadata::GENERATOR_TYPE_*> $value */
     public function getIdentityGenerationPreferences(): array
     {
         return $this->identityGenerationPreferences;
@@ -61,6 +64,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function setProxyDir(string $dir): void
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::triggerIfCalledFromOutside(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         $this->attributes['proxyDir'] = $dir;
     }
 
@@ -69,6 +81,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function getProxyDir(): string|null
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         return $this->attributes['proxyDir'] ?? null;
     }
 
@@ -79,6 +100,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function getAutoGenerateProxyClasses(): int
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         return $this->attributes['autoGenerateProxyClasses'] ?? ProxyFactory::AUTOGENERATE_ALWAYS;
     }
 
@@ -89,6 +119,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function setAutoGenerateProxyClasses(bool|int $autoGenerate): void
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::triggerIfCalledFromOutside(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         $this->attributes['autoGenerateProxyClasses'] = (int) $autoGenerate;
     }
 
@@ -97,6 +136,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function getProxyNamespace(): string|null
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         return $this->attributes['proxyNamespace'] ?? null;
     }
 
@@ -105,6 +153,15 @@ class Configuration extends \Doctrine\DBAL\Configuration
      */
     public function setProxyNamespace(string $ns): void
     {
+        if (PHP_VERSION_ID >= 80400) {
+            Deprecation::triggerIfCalledFromOutside(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Calling %s is deprecated and will not be possible in Doctrine ORM 4.0.',
+                __METHOD__,
+            );
+        }
+
         $this->attributes['proxyNamespace'] = $ns;
     }
 
@@ -122,7 +179,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Sets the entity alias map.
      *
-     * @psalm-param array<string, string> $entityNamespaces
+     * @phpstan-param array<string, string> $entityNamespaces
      */
     public function setEntityNamespaces(array $entityNamespaces): void
     {
@@ -132,7 +189,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Retrieves the list of registered entity namespace aliases.
      *
-     * @psalm-return array<string, string>
+     * @phpstan-return array<string, string>
      */
     public function getEntityNamespaces(): array
     {
@@ -191,7 +248,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
      * DQL function names are case-insensitive.
      *
      * @param class-string|callable $className Class name or a callable that returns the function.
-     * @psalm-param class-string<FunctionNode>|callable(string):FunctionNode $className
+     * @phpstan-param class-string<FunctionNode>|callable(string):FunctionNode $className
      */
     public function addCustomStringFunction(string $name, string|callable $className): void
     {
@@ -201,7 +258,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Gets the implementation class name of a registered custom string DQL function.
      *
-     * @psalm-return class-string<FunctionNode>|callable(string):FunctionNode|null
+     * @phpstan-return class-string<FunctionNode>|callable(string):FunctionNode|null
      */
     public function getCustomStringFunction(string $name): string|callable|null
     {
@@ -218,7 +275,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
      *
      * Any previously added string functions are discarded.
      *
-     * @psalm-param array<string, class-string<FunctionNode>|callable(string):FunctionNode> $functions The map of custom
+     * @phpstan-param array<string, class-string<FunctionNode>|callable(string):FunctionNode> $functions The map of custom
      *                                                     DQL string functions.
      */
     public function setCustomStringFunctions(array $functions): void
@@ -236,7 +293,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
      * DQL function names are case-insensitive.
      *
      * @param class-string|callable $className Class name or a callable that returns the function.
-     * @psalm-param class-string<FunctionNode>|callable(string):FunctionNode $className
+     * @phpstan-param class-string<FunctionNode>|callable(string):FunctionNode $className
      */
     public function addCustomNumericFunction(string $name, string|callable $className): void
     {
@@ -246,7 +303,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Gets the implementation class name of a registered custom numeric DQL function.
      *
-     * @psalm-return ?class-string<FunctionNode>|callable(string):FunctionNode
+     * @phpstan-return class-string<FunctionNode>|callable(string):FunctionNode|null
      */
     public function getCustomNumericFunction(string $name): string|callable|null
     {
@@ -281,7 +338,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
      * DQL function names are case-insensitive.
      *
      * @param string|callable $className Class name or a callable that returns the function.
-     * @psalm-param class-string<FunctionNode>|callable(string):FunctionNode $className
+     * @phpstan-param class-string<FunctionNode>|callable(string):FunctionNode $className
      */
     public function addCustomDatetimeFunction(string $name, string|callable $className): void
     {
@@ -309,7 +366,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
      * Any previously added date/time functions are discarded.
      *
      * @param array $functions The map of custom DQL date/time functions.
-     * @psalm-param array<string, class-string<FunctionNode>|callable(string):FunctionNode> $functions
+     * @phpstan-param array<string, class-string<FunctionNode>|callable(string):FunctionNode> $functions
      */
     public function setCustomDatetimeFunctions(array $functions): void
     {
@@ -538,7 +595,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Returns query hints, which will be applied to every query in application
      *
-     * @psalm-return array<string, mixed>
+     * @phpstan-return array<string, mixed>
      */
     public function getDefaultQueryHints(): array
     {
@@ -548,7 +605,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     /**
      * Sets array of query hints, which will be applied to every query in application
      *
-     * @psalm-param array<string, mixed> $defaultQueryHints
+     * @phpstan-param array<string, mixed> $defaultQueryHints
      */
     public function setDefaultQueryHints(array $defaultQueryHints): void
     {
@@ -593,8 +650,30 @@ class Configuration extends \Doctrine\DBAL\Configuration
         $this->attributes['schemaIgnoreClasses'] = $schemaIgnoreClasses;
     }
 
+    public function isNativeLazyObjectsEnabled(): bool
+    {
+        return $this->attributes['nativeLazyObjects'] ?? false;
+    }
+
+    public function enableNativeLazyObjects(bool $nativeLazyObjects): void
+    {
+        if (PHP_VERSION_ID >= 80400 && ! $nativeLazyObjects) {
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12005',
+                'Disabling native lazy objects is deprecated and will be impossible in Doctrine ORM 4.0.',
+            );
+        }
+
+        if (PHP_VERSION_ID < 80400 && $nativeLazyObjects) {
+            throw new LogicException('Lazy loading proxies require PHP 8.4 or higher.');
+        }
+
+        $this->attributes['nativeLazyObjects'] = $nativeLazyObjects;
+    }
+
     /**
-     * To be deprecated in 3.1.0
+     * @deprecated lazy ghost objects are always enabled
      *
      * @return true
      */
@@ -603,7 +682,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
         return true;
     }
 
-    /** To be deprecated in 3.1.0 */
+    /** @deprecated lazy ghost objects cannot be disabled */
     public function setLazyGhostObjectEnabled(bool $flag): void
     {
         if (! $flag) {
@@ -614,7 +693,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
         }
     }
 
-    /** To be deprecated in 3.1.0 */
+    /** @deprecated rejecting ID collisions in the identity map cannot be disabled */
     public function setRejectIdCollisionInIdentityMap(bool $flag): void
     {
         if (! $flag) {
@@ -626,7 +705,7 @@ class Configuration extends \Doctrine\DBAL\Configuration
     }
 
     /**
-     * To be deprecated in 3.1.0
+     * @deprecated rejecting ID collisions in the identity map is always enabled
      *
      * @return true
      */

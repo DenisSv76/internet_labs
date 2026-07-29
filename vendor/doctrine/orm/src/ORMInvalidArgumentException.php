@@ -160,6 +160,11 @@ EXCEPTION
         return new self('You must configure a proxy directory. See docs for details');
     }
 
+    public static function lazyGhostUnavailable(): self
+    {
+        return new self('Symfony LazyGhost is not available. Please install the "symfony/var-exporter" package version 6.4 or 7 to use this feature or enable PHP 8.4 native lazy objects.');
+    }
+
     public static function proxyNamespaceRequired(): self
     {
         return new self('You must configure a proxy namespace');
@@ -185,7 +190,7 @@ EXCEPTION
             . ' configured to cascade persist operations for entity: ' . self::objToStr($entity) . '.'
             . ' To solve this issue: Either explicitly call EntityManager#persist()'
             . ' on this unknown entity or configure cascade persist'
-            . ' this association in the mapping for example @ManyToOne(..,cascade={"persist"}).'
+            . ' this association in the mapping for example #[ORM\ManyToOne(..., cascade: [\'persist\'])].'
             . ($entity instanceof Stringable
                 ? ''
                 : ' If you cannot find out which entity causes the problem implement \''

@@ -19,6 +19,7 @@ use Doctrine\ORM\Query;
 use Doctrine\ORM\Utility\PersisterHelper;
 
 use function array_fill;
+use function array_merge;
 use function array_pop;
 use function assert;
 use function count;
@@ -247,10 +248,17 @@ class ManyToManyPersister extends AbstractCollectionPersister
 
             if ($value === null && ($operator === Comparison::EQ || $operator === Comparison::NEQ)) {
                 $whereClauses[] = sprintf('te.%s %s NULL', $field, $operator === Comparison::EQ ? 'IS' : 'IS NOT');
+            } elseif ($operator === Comparison::IN || $operator === Comparison::NIN) {
+                $whereClauses[] = sprintf('te.%s %s (%s)', $field, $operator === Comparison::IN ? 'IN' : 'NOT IN', implode(', ', array_fill(0, count($value), '?')));
+                foreach ($value as $item) {
+                    $params     = array_merge($params, PersisterHelper::convertToParameterValue($item, $this->em));
+                    $paramTypes = array_merge($paramTypes, PersisterHelper::inferParameterTypes($name, $item, $targetClass, $this->em));
+                }
             } else {
                 $whereClauses[] = sprintf('te.%s %s ?', $field, $operator);
-                $params[]       = $value;
-                $paramTypes[]   = PersisterHelper::getTypeOfField($name, $targetClass, $this->em)[0];
+
+                $params     = [...$params, ...PersisterHelper::convertToParameterValue($value, $this->em)];
+                $paramTypes = [...$paramTypes, ...PersisterHelper::inferParameterTypes($name, $value, $targetClass, $this->em)];
             }
         }
 
@@ -292,7 +300,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      * @return string[] ordered tuple:
      *                   - JOIN condition to add to the SQL
      *                   - WHERE condition to add to the SQL
-     * @psalm-return array{0: string, 1: string}
+     * @phpstan-return array{0: string, 1: string}
      */
     public function getFilterSql(AssociationMapping $mapping): array
     {
@@ -340,7 +348,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      * Generate ON condition
      *
      * @return string[]
-     * @psalm-return list<string>
+     * @phpstan-return list<string>
      */
     protected function getOnConditionSQL(AssociationMapping $mapping): array
     {
@@ -412,7 +420,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      *
      * @return string[]|string[][] ordered tuple containing the SQL to be executed and an array
      *                             of types for bound parameters
-     * @psalm-return array{0: string, 1: list<string>}
+     * @phpstan-return array{0: string, 1: list<string>}
      */
     protected function getDeleteRowSQL(PersistentCollection $collection): array
     {
@@ -447,7 +455,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      * Internal note: Order of the parameters must be the same as the order of the columns in getDeleteRowSql.
      *
      * @return mixed[]
-     * @psalm-return list<mixed>
+     * @phpstan-return list<mixed>
      */
     protected function getDeleteRowSQLParameters(PersistentCollection $collection, object $element): array
     {
@@ -459,7 +467,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      *
      * @return string[]|string[][] ordered tuple containing the SQL to be executed and an array
      *                             of types for bound parameters
-     * @psalm-return array{0: string, 1: list<string>}
+     * @phpstan-return array{0: string, 1: list<string>}
      */
     protected function getInsertRowSQL(PersistentCollection $collection): array
     {
@@ -496,7 +504,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      * Internal note: Order of the parameters must be the same as the order of the columns in getInsertRowSql.
      *
      * @return mixed[]
-     * @psalm-return list<mixed>
+     * @phpstan-return list<mixed>
      */
     protected function getInsertRowSQLParameters(PersistentCollection $collection, object $element): array
     {
@@ -508,7 +516,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      * of the join table columns as specified in ManyToManyMapping#joinTableColumns.
      *
      * @return mixed[]
-     * @psalm-return list<mixed>
+     * @phpstan-return list<mixed>
      */
     private function collectJoinTableColumnParameters(
         PersistentCollection $collection,
@@ -557,7 +565,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      *                - where clauses to be added for filtering
      *                - parameters to be bound for filtering
      *                - types of the parameters to be bound for filtering
-     * @psalm-return array{0: string, 1: list<string>, 2: list<mixed>, 3: list<string>}
+     * @phpstan-return array{0: string, 1: list<string>, 2: list<mixed>, 3: list<string>}
      */
     private function getJoinTableRestrictionsWithKey(
         PersistentCollection $collection,
@@ -647,7 +655,7 @@ class ManyToManyPersister extends AbstractCollectionPersister
      *                - where clauses to be added for filtering
      *                - parameters to be bound for filtering
      *                - types of the parameters to be bound for filtering
-     * @psalm-return array{0: string, 1: list<string>, 2: list<mixed>, 3: list<string>}
+     * @phpstan-return array{0: string, 1: list<string>, 2: list<mixed>, 3: list<string>}
      */
     private function getJoinTableRestrictions(
         PersistentCollection $collection,

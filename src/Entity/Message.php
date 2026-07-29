@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Repository\MessageRepository;
 use Doctrine\ORM\Mapping as ORM;
+use \DateTimeImmutable;
 
 #[ORM\Entity(repositoryClass: MessageRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -14,83 +15,123 @@ class Message
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    private ?User $userFrom = null;
+    #[ORM\Column(length: 40)]
+    private ?string $name = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
-    private ?User $userTo = null;
+    #[ORM\Column(length: 100)]
+    private ?string $email = null;
+
+    #[ORM\Column(length: 20)]
+    private ?string $phone = null;
+
+    #[ORM\Column(length: 45)]
+    private ?string $ip = null;
+
+    #[ORM\Column(length: 500)]
+    private ?string $userAgent = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $text = null;
+    private ?string $comment = null;
 
     #[ORM\Column]
-    private ?bool $readIt = false;
+    private ?bool $notificationSent = false;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $createdAt = null;
+    private ?DateTimeImmutable $createdAt = null;
 
     #[ORM\Column]
-    private ?\DateTimeImmutable $updatedAt = null;
-
-    #[ORM\Column]
-    private ?bool $isReceiving = false;
+    private ?DateTimeImmutable $updatedAt = null;
 
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    public function getUserFrom(): ?User
+    public function getName(): ?string
     {
-        return $this->userFrom;
+        return $this->name;
     }
 
-    public function setUserFrom(?User $userFrom): static
+    public function setName(string $name): static
     {
-        $this->userFrom = $userFrom;
+        $this->name = $name;
 
         return $this;
     }
 
-    public function getUserTo(): ?User
+    public function getEmail(): ?string
     {
-        return $this->userTo;
+        return $this->email;
     }
 
-    public function setUserTo(?User $userTo): static
+    public function setEmail(string $email): static
     {
-        $this->userTo = $userTo;
+        $this->email = $email;
 
         return $this;
     }
 
-    public function getText(): ?string
+    public function getPhone(): ?string
     {
-        return $this->text;
+        return $this->phone;
     }
 
-    public function setText(string $text): static
+    public function setPhone(string $phone): static
     {
-        $this->text = $text;
+        $this->phone = $phone;
 
         return $this;
     }
 
-    public function isReadIt(): ?bool
+    public function getIp(): ?string
     {
-        return $this->readIt;
+        return $this->ip;
     }
 
-    public function setReadIt(bool $readIt): static
+    public function setIp(string $ip): static
     {
-        $this->readIt = $readIt;
+        $this->ip = $ip;
 
         return $this;
     }
 
-    public function getCreatedAt(): ?\DateTimeImmutable
+    public function getUserAgent(): ?string
+    {
+        return $this->userAgent;
+    }
+
+    public function setUserAgent(string $userAgent): static
+    {
+        $this->userAgent = $userAgent;
+
+        return $this;
+    }
+
+    public function getComment(): ?string
+    {
+        return $this->comment;
+    }
+
+    public function setComment(string $comment): static
+    {
+        $this->comment = $comment;
+
+        return $this;
+    }
+
+    public function isNotificationSent(): ?bool
+    {
+        return $this->notificationSent;
+    }
+
+    public function setNotificationSent(bool $notificationSent): static
+    {
+        $this->notificationSent = $notificationSent;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?DateTimeImmutable
     {
         return $this->createdAt;
     }
@@ -98,13 +139,13 @@ class Message
     #[ORM\PrePersist]
     public function setCreatedAt(): static
     {
-        $this->createdAt = new \DateTimeImmutable();
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->createdAt = new DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable();
 
         return $this;
     }
 
-    public function getUpdatedAt(): ?\DateTimeImmutable
+    public function getUpdatedAt(): ?DateTimeImmutable
     {
         return $this->updatedAt;
     }
@@ -112,19 +153,7 @@ class Message
     #[ORM\PreUpdate]
     public function setUpdatedAt(): static
     {
-        $this->updatedAt = new \DateTimeImmutable();
-
-        return $this;
-    }
-
-    public function isReceiving(): ?bool
-    {
-        return $this->isReceiving;
-    }
-
-    public function setReceiving(bool $isReceiving): static
-    {
-        $this->isReceiving = $isReceiving;
+        $this->updatedAt = new DateTimeImmutable();
 
         return $this;
     }

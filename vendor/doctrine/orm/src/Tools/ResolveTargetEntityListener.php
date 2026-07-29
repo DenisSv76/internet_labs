@@ -40,7 +40,7 @@ class ResolveTargetEntityListener implements EventSubscriber
     /**
      * Adds a target-entity class name to resolve to a new class name.
      *
-     * @psalm-param array<string, mixed> $mapping
+     * @phpstan-param array<string, mixed> $mapping
      */
     public function addResolveTargetEntity(string $originalEntity, string $newEntity, array $mapping): void
     {
@@ -72,12 +72,6 @@ class ResolveTargetEntityListener implements EventSubscriber
         foreach ($cm->associationMappings as $mapping) {
             if (isset($this->resolveTargetEntities[$mapping->targetEntity])) {
                 $this->remapAssociation($cm, $mapping);
-            }
-        }
-
-        foreach ($this->resolveTargetEntities as $interface => $data) {
-            if ($data['targetEntity'] === $cm->getName()) {
-                $args->getEntityManager()->getMetadataFactory()->setMetadataFor($interface, $cm);
             }
         }
 

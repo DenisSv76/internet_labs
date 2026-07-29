@@ -26,7 +26,7 @@ final class FieldMapping implements ArrayAccess
     public bool|null $notInsertable      = null;
     public bool|null $notUpdatable       = null;
     public string|null $columnDefinition = null;
-    /** @psalm-var ClassMetadata::GENERATED_*|null */
+    /** @phpstan-var ClassMetadata::GENERATED_*|null */
     public int|null $generated = null;
     /** @var class-string<BackedEnum>|null */
     public string|null $enumType = null;
@@ -42,6 +42,8 @@ final class FieldMapping implements ArrayAccess
     public int|null $scale = null;
     /** Whether a unique constraint should be generated for the column. */
     public bool|null $unique = null;
+    /** Whether an index should be generated for the column. */
+    public bool|null $index = null;
     /**
      * @var class-string|null This is set when the field is inherited by this
      * class from another (inheritance) parent <em>entity</em> class. The value
@@ -54,6 +56,7 @@ final class FieldMapping implements ArrayAccess
      */
     public string|null $inherited = null;
 
+    /** @var class-string|null */
     public string|null $originalClass = null;
     public string|null $originalField = null;
     public bool|null $quoted          = null;
@@ -68,7 +71,9 @@ final class FieldMapping implements ArrayAccess
     public string|null $declaredField = null;
     public array|null $options        = null;
     public bool|null $version         = null;
-    public string|int|null $default   = null;
+
+    /** @deprecated Use options with 'default' key instead */
+    public string|int|null $default = null;
 
     /**
      * @param string $type       The type name of the mapped field. Can be one of
@@ -85,13 +90,14 @@ final class FieldMapping implements ArrayAccess
 
     /**
      * @param array<string, mixed> $mappingArray
-     * @psalm-param array{
+     * @phpstan-param array{
      *     type: string,
      *     fieldName: string,
      *     columnName: string,
      *     length?: int|null,
      *     id?: bool|null,
      *     nullable?: bool|null,
+     *     index?: bool|null,
      *     notInsertable?: bool|null,
      *     notUpdatable?: bool|null,
      *     columnDefinition?: string|null,
@@ -101,7 +107,7 @@ final class FieldMapping implements ArrayAccess
      *     scale?: int|null,
      *     unique?: bool|null,
      *     inherited?: string|null,
-     *     originalClass?: string|null,
+     *     originalClass?: class-string|null,
      *     originalField?: string|null,
      *     quoted?: bool|null,
      *     declared?: string|null,
@@ -136,7 +142,7 @@ final class FieldMapping implements ArrayAccess
     {
         $serialized = ['type', 'fieldName', 'columnName'];
 
-        foreach (['nullable', 'notInsertable', 'notUpdatable', 'id', 'unique', 'version', 'quoted'] as $boolKey) {
+        foreach (['nullable', 'notInsertable', 'notUpdatable', 'id', 'unique', 'version', 'quoted', 'index'] as $boolKey) {
             if ($this->$boolKey) {
                 $serialized[] = $boolKey;
             }

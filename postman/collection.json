@@ -1,0 +1,278 @@
+{
+    "info": {
+        "name": "Symfony Contact API",
+        "description": "API обратной связи с модерацией через HuggingFace AI.\n\nБазовый URL: http://localhost:8080",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_exporter_id": "symf_internet_lab"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8080",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Contact",
+            "description": "Отправка формы обратной связи",
+            "item": [
+                {
+                    "name": "✅ Успешная отправка",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status 200\", () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test(\"Response has message_id\", () => {",
+                                    "    const body = pm.response.json();",
+                                    "    pm.expect(body).to.have.property('message_id');",
+                                    "    pm.expect(body.message_id).to.be.a('number');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Иван Петров\",\n    \"phone\": \"+79991234567\",\n    \"email\": \"ivan@example.com\",\n    \"comment\": \"Здравствуйте! Хочу заказать разработку сайта. Пожалуйста, свяжитесь со мной.\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/contact",
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "contact"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"message_id\": 1\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "❌ Ошибка валидации — пустое имя",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status 400\", () => {",
+                                    "    pm.response.to.have.status(400);",
+                                    "});",
+                                    "",
+                                    "pm.test(\"Response has error\", () => {",
+                                    "    const body = pm.response.json();",
+                                    "    pm.expect(body).to.have.property('error');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"\",\n    \"phone\": \"+79991234567\",\n    \"email\": \"ivan@example.com\",\n    \"comment\": \"Тестовое сообщение\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/contact",
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "contact"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "400 Bad Request",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"error\": \"There are errors ... when sending a message\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "❌ Ошибка валидации — невалидный email",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status 400\", () => {",
+                                    "    pm.response.to.have.status(400);",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Иван\",\n    \"phone\": \"+79991234567\",\n    \"email\": \"not-an-email\",\n    \"comment\": \"Тестовое сообщение\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/contact",
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "contact"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "400 Bad Request",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "body": "{\n    \"error\": \"There are errors ... when sending a message\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "❌ Сообщение не прошло модерацию",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status 422\", () => {",
+                                    "    pm.response.to.have.status(422);",
+                                    "});",
+                                    "",
+                                    "pm.test(\"Response mentions unacceptable content\", () => {",
+                                    "    const body = pm.response.json();",
+                                    "    pm.expect(body.error).to.include(\"неприемлемо\");",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Иван\",\n    \"phone\": \"+79991234567\",\n    \"email\": \"ivan@example.com\",\n    \"comment\": \"Ты идиот и тебе место на свалке истории!!!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/contact",
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "contact"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "422 Unprocessable Entity",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"error\": \"Ваше сообщение неприемлемо по следующей причине: Обнаружен недопустимый контент (токсичность: insult, уверенность: 0.98)\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "❌ Превышен лимит запросов (429)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Status 429\", () => {",
+                                    "    pm.response.to.have.status(429);",
+                                    "});",
+                                    "",
+                                    "pm.test(\"Response has error\", () => {",
+                                    "    const body = pm.response.json();",
+                                    "    pm.expect(body).to.have.property('error');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Спамер\",\n    \"phone\": \"+79999999999\",\n    \"email\": \"spam@example.com\",\n    \"comment\": \"Быстрый повторный запрос для проверки rate limiter\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/contact",
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "contact"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "429 Too Many Requests",
+                            "status": "Too Many Requests",
+                            "code": 429,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"error\": \"Too many requests\"\n}"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

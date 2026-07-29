@@ -1,0 +1,8 @@
+framework:
+    rate_limiter:
+        anonymous_api:
+            policy: 'token_bucket'
+            limit: 1
+            rate:
+                interval: '1 minute'
+                amount: 1

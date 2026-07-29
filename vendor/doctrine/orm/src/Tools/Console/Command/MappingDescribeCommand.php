@@ -10,6 +10,9 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\FieldMapping;
 use Doctrine\Persistence\Mapping\MappingException;
 use InvalidArgumentException;
+use JsonException;
+use Symfony\Component\Console\Completion\CompletionInput;
+use Symfony\Component\Console\Completion\CompletionSuggestions;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -19,6 +22,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use function array_filter;
 use function array_map;
 use function array_merge;
+use function array_values;
 use function count;
 use function current;
 use function get_debug_type;
@@ -32,6 +36,7 @@ use function preg_match;
 use function preg_quote;
 use function print_r;
 use function sprintf;
+use function str_replace;
 
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
@@ -48,9 +53,17 @@ final class MappingDescribeCommand extends AbstractEntityManagerCommand
     protected function configure(): void
     {
         $this->setName('orm:mapping:describe')
-             ->addArgument('entityName', InputArgument::REQUIRED, 'Full or partial name of entity')
-             ->setDescription('Display information about mapped objects')
-             ->addOption('em', null, InputOption::VALUE_REQUIRED, 'Name of the entity manager to operate on')
+            ->addArgument('entityName', InputArgument::REQUIRED, 'Full or partial name of entity')
+            ->setDescription('Display information about mapped objects')
+            ->addOption('em', null, InputOption::VALUE_REQUIRED, 'Name of the entity manager to operate on')
+            ->addOption(
+                'format',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Output format (text, json)',
+                MappingDescribeCommandFormat::TEXT->value,
+                array_map(static fn (MappingDescribeCommandFormat $format) => $format->value, MappingDescribeCommandFormat::cases()),
+            )
              ->setHelp(<<<'EOT'
 The %command.full_name% command describes the metadata for the given full or partial entity class name.
 
@@ -59,18 +72,45 @@ The %command.full_name% command describes the metadata for the given full or par
 Or:
 
     <info>%command.full_name%</info> MyEntity
+    
+To output the metadata in JSON format, use the <info>--format</info> option:
+  <info>%command.full_name% My\Namespace\Entity\MyEntity --format=json</info>
+
+To use a specific entity manager (e.g., for multi-DB projects), use the <info>--em</info> option:
+  <info>%command.full_name% My\Namespace\Entity\MyEntity --em=my_custom_entity_manager</info>
+
 EOT);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $ui = (new SymfonyStyle($input, $output))->getErrorStyle();
+        $ui = new SymfonyStyle($input, $output);
+
+        $format = MappingDescribeCommandFormat::from($input->getOption('format'));
 
         $entityManager = $this->getEntityManager($input);
 
-        $this->displayEntity($input->getArgument('entityName'), $entityManager, $ui);
+        $this->displayEntity($input->getArgument('entityName'), $entityManager, $ui, $format);
 
         return 0;
+    }
+
+    public function complete(CompletionInput $input, CompletionSuggestions $suggestions): void
+    {
+        if ($input->mustSuggestArgumentValuesFor('entityName')) {
+            $entityManager = $this->getEntityManager($input);
+
+            $entities = array_map(
+                static fn (string $fqcn) => str_replace('\\', '\\\\', $fqcn),
+                $this->getMappedEntities($entityManager),
+            );
+
+            $suggestions->suggestValues(array_values($entities));
+        }
+
+        if ($input->mustSuggestOptionValuesFor('format')) {
+            $suggestions->suggestValues(array_map(static fn (MappingDescribeCommandFormat $format) => $format->value, MappingDescribeCommandFormat::cases()));
+        }
     }
 
     /**
@@ -82,8 +122,46 @@ EOT);
         string $entityName,
         EntityManagerInterface $entityManager,
         SymfonyStyle $ui,
+        MappingDescribeCommandFormat $format,
     ): void {
         $metadata = $this->getClassMetadata($entityName, $entityManager);
+
+        if ($format === MappingDescribeCommandFormat::JSON) {
+            $ui->text(json_encode(
+                [
+                    'name' => $metadata->name,
+                    'rootEntityName' => $metadata->rootEntityName,
+                    'customGeneratorDefinition' => $this->formatValueAsJson($metadata->customGeneratorDefinition),
+                    'customRepositoryClassName' => $metadata->customRepositoryClassName,
+                    'isMappedSuperclass' => $metadata->isMappedSuperclass,
+                    'isEmbeddedClass' => $metadata->isEmbeddedClass,
+                    'parentClasses' => $metadata->parentClasses,
+                    'subClasses' => $metadata->subClasses,
+                    'embeddedClasses' => $metadata->embeddedClasses,
+                    'identifier' => $metadata->identifier,
+                    'inheritanceType' => $metadata->inheritanceType,
+                    'discriminatorColumn' => $this->formatValueAsJson($metadata->discriminatorColumn),
+                    'discriminatorValue' => $metadata->discriminatorValue,
+                    'discriminatorMap' => $metadata->discriminatorMap,
+                    'generatorType' => $metadata->generatorType,
+                    'table' => $this->formatValueAsJson($metadata->table),
+                    'isIdentifierComposite' => $metadata->isIdentifierComposite,
+                    'containsForeignIdentifier' => $metadata->containsForeignIdentifier,
+                    'containsEnumIdentifier' => $metadata->containsEnumIdentifier,
+                    'sequenceGeneratorDefinition' => $this->formatValueAsJson($metadata->sequenceGeneratorDefinition),
+                    'changeTrackingPolicy' => $metadata->changeTrackingPolicy,
+                    'isVersioned' => $metadata->isVersioned,
+                    'versionField' => $metadata->versionField,
+                    'isReadOnly' => $metadata->isReadOnly,
+                    'entityListeners' => $metadata->entityListeners,
+                    'associationMappings' => $this->formatMappingsAsJson($metadata->associationMappings),
+                    'fieldMappings' => $this->formatMappingsAsJson($metadata->fieldMappings),
+                ],
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR,
+            ));
+
+            return;
+        }
 
         $ui->table(
             ['Field', 'Value'],
@@ -97,7 +175,7 @@ EOT);
                     $this->formatField('Embedded class?', $metadata->isEmbeddedClass),
                     $this->formatField('Parent classes', $metadata->parentClasses),
                     $this->formatField('Sub classes', $metadata->subClasses),
-                    $this->formatField('Embedded classes', $metadata->subClasses),
+                    $this->formatField('Embedded classes', $metadata->embeddedClasses),
                     $this->formatField('Identifier', $metadata->identifier),
                     $this->formatField('Inheritance type', $metadata->inheritanceType),
                     $this->formatField('Discriminator column', $metadata->discriminatorColumn),
@@ -162,7 +240,7 @@ EOT);
 
         $matches = array_filter(
             $this->getMappedEntities($entityManager),
-            static fn ($mappedEntity) => preg_match('{' . preg_quote($entityName) . '}', $mappedEntity)
+            static fn ($mappedEntity) => preg_match('{' . preg_quote($entityName) . '}', $mappedEntity),
         );
 
         if (! $matches) {
@@ -222,6 +300,22 @@ EOT);
         throw new InvalidArgumentException(sprintf('Do not know how to format value "%s"', print_r($value, true)));
     }
 
+    /** @throws JsonException */
+    private function formatValueAsJson(mixed $value): mixed
+    {
+        if (is_object($value)) {
+            $value = (array) $value;
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $k => $v) {
+                $value[$k] = $this->formatValueAsJson($v);
+            }
+        }
+
+        return $value;
+    }
+
     /**
      * Add the given label and value to the two column table output
      *
@@ -229,7 +323,7 @@ EOT);
      * @param mixed  $value A Value to show
      *
      * @return string[]
-     * @psalm-return array{0: string, 1: string}
+     * @phpstan-return array{0: string, 1: string}
      */
     private function formatField(string $label, mixed $value): array
     {
@@ -243,10 +337,10 @@ EOT);
     /**
      * Format the association mappings
      *
-     * @psalm-param array<string, FieldMapping|AssociationMapping> $propertyMappings
+     * @phpstan-param array<string, FieldMapping|AssociationMapping> $propertyMappings
      *
      * @return string[][]
-     * @psalm-return list<array{0: string, 1: string}>
+     * @phpstan-return list<array{0: string, 1: string}>
      */
     private function formatMappings(array $propertyMappings): array
     {
@@ -264,15 +358,39 @@ EOT);
     }
 
     /**
+     * @param array<string, FieldMapping|AssociationMapping> $propertyMappings
+     *
+     * @return array<string, mixed>
+     */
+    private function formatMappingsAsJson(array $propertyMappings): array
+    {
+        $output = [];
+
+        foreach ($propertyMappings as $propertyName => $mapping) {
+            $output[$propertyName] = $this->formatValueAsJson((array) $mapping);
+        }
+
+        return $output;
+    }
+
+    /**
      * Format the entity listeners
      *
-     * @psalm-param list<object> $entityListeners
+     * @phpstan-param array<string, list<array{class: class-string, method: string}>> $entityListeners
      *
      * @return string[]
-     * @psalm-return array{0: string, 1: string}
+     * @phpstan-return array{0: string, 1: string}
      */
     private function formatEntityListeners(array $entityListeners): array
     {
-        return $this->formatField('Entity listeners', array_map('get_class', $entityListeners));
+        $listeners = [];
+
+        foreach ($entityListeners as $eventName => $eventListeners) {
+            foreach ($eventListeners as $listener) {
+                $listeners[] = sprintf('%s: %s::%s', $eventName, $listener['class'], $listener['method']);
+            }
+        }
+
+        return $this->formatField('Entity listeners', $listeners);
     }
 }

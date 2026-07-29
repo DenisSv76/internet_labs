@@ -10,8 +10,11 @@ use Doctrine\ORM\Internal\SQLResultCasing;
 use function array_map;
 use function array_merge;
 use function assert;
+use function explode;
+use function implode;
 use function is_numeric;
 use function preg_replace;
+use function sprintf;
 use function substr;
 
 /**
@@ -24,7 +27,7 @@ class DefaultQuoteStrategy implements QuoteStrategy
     public function getColumnName(string $fieldName, ClassMetadata $class, AbstractPlatform $platform): string
     {
         return isset($class->fieldMappings[$fieldName]->quoted)
-            ? $platform->quoteIdentifier($class->fieldMappings[$fieldName]->columnName)
+            ? $platform->quoteSingleIdentifier($class->fieldMappings[$fieldName]->columnName)
             : $class->fieldMappings[$fieldName]->columnName;
     }
 
@@ -38,11 +41,17 @@ class DefaultQuoteStrategy implements QuoteStrategy
         $tableName = $class->table['name'];
 
         if (! empty($class->table['schema'])) {
-            $tableName = $class->table['schema'] . '.' . $class->table['name'];
+            return isset($class->table['quoted'])
+                ? sprintf(
+                    '%s.%s',
+                    $platform->quoteSingleIdentifier($class->table['schema']),
+                    $platform->quoteSingleIdentifier($tableName),
+                )
+                : $class->table['schema'] . '.' . $class->table['name'];
         }
 
         return isset($class->table['quoted'])
-            ? $platform->quoteIdentifier($tableName)
+            ? $platform->quoteSingleIdentifier($tableName)
             : $tableName;
     }
 
@@ -52,14 +61,17 @@ class DefaultQuoteStrategy implements QuoteStrategy
     public function getSequenceName(array $definition, ClassMetadata $class, AbstractPlatform $platform): string
     {
         return isset($definition['quoted'])
-            ? $platform->quoteIdentifier($definition['sequenceName'])
+            ? implode('.', array_map(
+                static fn (string $part) => $platform->quoteSingleIdentifier($part),
+                explode('.', $definition['sequenceName']),
+            ))
             : $definition['sequenceName'];
     }
 
     public function getJoinColumnName(JoinColumnMapping $joinColumn, ClassMetadata $class, AbstractPlatform $platform): string
     {
         return isset($joinColumn->quoted)
-            ? $platform->quoteIdentifier($joinColumn->name)
+            ? $platform->quoteSingleIdentifier($joinColumn->name)
             : $joinColumn->name;
     }
 
@@ -69,7 +81,7 @@ class DefaultQuoteStrategy implements QuoteStrategy
         AbstractPlatform $platform,
     ): string {
         return isset($joinColumn->quoted)
-            ? $platform->quoteIdentifier($joinColumn->referencedColumnName)
+            ? $platform->quoteSingleIdentifier($joinColumn->referencedColumnName)
             : $joinColumn->referencedColumnName;
     }
 
@@ -87,7 +99,7 @@ class DefaultQuoteStrategy implements QuoteStrategy
         $tableName = $association->joinTable->name;
 
         if (isset($association->joinTable->quoted)) {
-            $tableName = $platform->quoteIdentifier($tableName);
+            $tableName = $platform->quoteSingleIdentifier($tableName);
         }
 
         return $schema . $tableName;
@@ -113,7 +125,7 @@ class DefaultQuoteStrategy implements QuoteStrategy
             $joinColumns            = $assoc->joinColumns;
             $assocQuotedColumnNames = array_map(
                 static fn (JoinColumnMapping $joinColumn) => isset($joinColumn->quoted)
-                    ? $platform->quoteIdentifier($joinColumn->name)
+                    ? $platform->quoteSingleIdentifier($joinColumn->name)
                     : $joinColumn->name,
                 $joinColumns,
             );

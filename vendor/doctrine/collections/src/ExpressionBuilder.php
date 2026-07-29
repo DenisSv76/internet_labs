@@ -15,6 +15,8 @@ use Doctrine\Common\Collections\Expr\Value;
  * Important Notice for interoperable code: You have to use scalar
  * values only for comparisons, otherwise the behavior of the comparison
  * may be different between implementations (Array vs ORM vs ODM).
+ *
+ * @final since 2.5
  */
 class ExpressionBuilder
 {
@@ -75,6 +77,11 @@ class ExpressionBuilder
     public function isNull(string $field)
     {
         return new Comparison($field, Comparison::EQ, new Value(null));
+    }
+
+    public function isNotNull(string $field): Comparison
+    {
+        return new Comparison($field, Comparison::NEQ, new Value(null));
     }
 
     /**

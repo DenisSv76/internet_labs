@@ -17,19 +17,25 @@ use Doctrine\ORM\UnitOfWork;
 use Generator;
 use LogicException;
 use ReflectionClass;
+use ReflectionEnum;
 
+use function array_key_exists;
+use function array_keys;
 use function array_map;
 use function array_merge;
 use function count;
+use function current;
 use function end;
 use function in_array;
 use function is_array;
+use function is_object;
+use function ksort;
 
 /**
  * Base class for all hydrators. A hydrator is a class that provides some form
  * of transformation of an SQL result set into another structure.
  *
- * @psalm-consistent-constructor
+ * @phpstan-consistent-constructor
  */
 abstract class AbstractHydrator
 {
@@ -86,7 +92,7 @@ abstract class AbstractHydrator
     /**
      * Initiates a row-by-row hydration.
      *
-     * @psalm-param array<string, mixed> $hints
+     * @phpstan-param array<string, mixed> $hints
      *
      * @return Generator<array-key, mixed>
      *
@@ -123,8 +129,10 @@ abstract class AbstractHydrator
                     } else {
                         yield from $result;
                     }
-                } else {
+                } elseif (is_object(current($result))) {
                     yield $result;
+                } else {
+                    yield array_merge(...$result);
                 }
             }
         } finally {
@@ -153,7 +161,7 @@ abstract class AbstractHydrator
     /**
      * Hydrates all rows returned by the passed statement instance at once.
      *
-     * @psalm-param array<string, string> $hints
+     * @phpstan-param array<string, string> $hints
      */
     public function hydrateAll(Result $stmt, ResultSetMapping $resultSetMapping, array $hints = []): mixed
     {
@@ -242,14 +250,14 @@ abstract class AbstractHydrator
      * the values applied. Scalar values are kept in a specific key 'scalars'.
      *
      * @param mixed[] $data SQL Result Row.
-     * @psalm-param array<string, string> $id                 Dql-Alias => ID-Hash.
-     * @psalm-param array<string, bool>   $nonemptyComponents Does this DQL-Alias has at least one non NULL value?
+     * @phpstan-param array<string, string> $id                 Dql-Alias => ID-Hash.
+     * @phpstan-param array<string, bool>   $nonemptyComponents Does this DQL-Alias has at least one non NULL value?
      *
      * @return array<string, array<string, mixed>> An array with all the fields
      *                                             (name => value) of the data
      *                                             row, grouped by their
      *                                             component alias.
-     * @psalm-return array{
+     * @phpstan-return array{
      *                   data: array<array-key, array>,
      *                   newObjects?: array<array-key, array{
      *                       class: ReflectionClass,
@@ -262,6 +270,17 @@ abstract class AbstractHydrator
     protected function gatherRowData(array $data, array &$id, array &$nonemptyComponents): array
     {
         $rowData = ['data' => [], 'newObjects' => []];
+
+        foreach ($this->rsm->newObjectMappings as $mapping) {
+            if (! array_key_exists($mapping['objIndex'], $this->rsm->newObject)) {
+                $this->rsm->newObject[$mapping['objIndex']] = $mapping['className'];
+            }
+        }
+
+        foreach ($this->rsm->newObject as $objIndex => $newObject) {
+            $rowData['newObjects'][$objIndex]['class'] = new ReflectionClass($newObject);
+            $rowData['newObjects'][$objIndex]['args']  = [];
+        }
 
         foreach ($data as $key => $value) {
             $cacheKeyInfo = $this->hydrateColumnInfo($key);
@@ -282,7 +301,6 @@ abstract class AbstractHydrator
                         $value = $this->buildEnum($value, $cacheKeyInfo['enumType']);
                     }
 
-                    $rowData['newObjects'][$objIndex]['class']           = $cacheKeyInfo['class'];
                     $rowData['newObjects'][$objIndex]['args'][$argIndex] = $value;
                     break;
 
@@ -336,26 +354,43 @@ abstract class AbstractHydrator
             }
         }
 
-        foreach ($this->resultSetMapping()->nestedNewObjectArguments as $objIndex => ['ownerIndex' => $ownerIndex, 'argIndex' => $argIndex]) {
-            if (! isset($rowData['newObjects'][$ownerIndex . ':' . $argIndex])) {
-                continue;
+        $nestedEntities = [];
+        /**@var string $argAlias */
+        foreach ($this->resultSetMapping()->nestedNewObjectArguments as ['ownerIndex' => $ownerIndex, 'argIndex' => $argIndex, 'argAlias' => $argAlias]) {
+            if (array_key_exists($argAlias, $rowData['newObjects'])) {
+                ksort($rowData['newObjects'][$argAlias]['args']);
+                $rowData['newObjects'][$ownerIndex]['args'][$argIndex] = $rowData['newObjects'][$argAlias]['class']->newInstanceArgs($rowData['newObjects'][$argAlias]['args']);
+                unset($rowData['newObjects'][$argAlias]);
+            } elseif (array_key_exists($argAlias, $rowData['data'])) {
+                if (! array_key_exists($argAlias, $nestedEntities)) {
+                    $nestedEntities[$argAlias]  = '';
+                    $rowData['data'][$argAlias] = $this->hydrateNestedEntity($rowData['data'][$argAlias], $argAlias);
+                }
+
+                $rowData['newObjects'][$ownerIndex]['args'][$argIndex] = $rowData['data'][$argAlias];
+            } else {
+                throw new LogicException($argAlias . ' does not exist');
             }
+        }
 
-            $newObject = $rowData['newObjects'][$ownerIndex . ':' . $argIndex];
-            unset($rowData['newObjects'][$ownerIndex . ':' . $argIndex]);
-
-            $obj = $newObject['class']->newInstanceArgs($newObject['args']);
-
-            $rowData['newObjects'][$ownerIndex]['args'][$argIndex] = $obj;
+        foreach (array_keys($nestedEntities) as $entity) {
+            unset($rowData['data'][$entity]);
         }
 
         foreach ($rowData['newObjects'] as $objIndex => $newObject) {
-            $obj = $newObject['class']->newInstanceArgs($newObject['args']);
+            ksort($rowData['newObjects'][$objIndex]['args']);
+            $obj = $rowData['newObjects'][$objIndex]['class']->newInstanceArgs($rowData['newObjects'][$objIndex]['args']);
 
             $rowData['newObjects'][$objIndex]['obj'] = $obj;
         }
 
         return $rowData;
+    }
+
+    /** @param mixed[] $data pre-hydrated SQL Result Row. */
+    protected function hydrateNestedEntity(array $data, string $dqlAlias): mixed
+    {
+        return $data;
     }
 
     /**
@@ -367,10 +402,10 @@ abstract class AbstractHydrator
      * of elements as before.
      *
      * @param mixed[] $data
-     * @psalm-param array<string, mixed> $data
+     * @phpstan-param array<string, mixed> $data
      *
      * @return mixed[] The processed row.
-     * @psalm-return array<string, mixed>
+     * @phpstan-return array<string, mixed>
      */
     protected function gatherScalarRowData(array &$data): array
     {
@@ -405,7 +440,7 @@ abstract class AbstractHydrator
      * @param string $key Column name
      *
      * @return mixed[]|null
-     * @psalm-return array<string, mixed>|null
+     * @phpstan-return array<string, mixed>|null
      */
     protected function hydrateColumnInfo(string $key): array|null
     {
@@ -454,7 +489,6 @@ abstract class AbstractHydrator
                     'type'                 => Type::getType($this->rsm->typeMappings[$key]),
                     'argIndex'             => $mapping['argIndex'],
                     'objIndex'             => $mapping['objIndex'],
-                    'class'                => new ReflectionClass($mapping['className']),
                     'enumType'             => $this->rsm->enumMappings[$key] ?? null,
                 ];
 
@@ -502,7 +536,7 @@ abstract class AbstractHydrator
 
     /**
      * @return string[]
-     * @psalm-return non-empty-list<string>
+     * @phpstan-return non-empty-list<string>
      */
     private function getDiscriminatorValues(ClassMetadata $classMetadata): array
     {
@@ -564,12 +598,17 @@ abstract class AbstractHydrator
      */
     final protected function buildEnum(mixed $value, string $enumType): BackedEnum|array
     {
+        $reflection  = new ReflectionEnum($enumType);
+        $isIntBacked = $reflection->isBacked() && $reflection->getBackingType()->getName() === 'int';
+
         if (is_array($value)) {
             return array_map(
-                static fn ($value) => $enumType::from($value),
+                static fn ($value) => $enumType::from($isIntBacked ? (int) $value : $value),
                 $value,
             );
         }
+
+        $value = $isIntBacked ? (int) $value : $value;
 
         return $enumType::from($value);
     }
