@@ -1,6 +1,16 @@
-# 🚀 Symfony Contact API — API обратной связи с модерацией через huggingface AI
+# 🚀 Symfony Contact API
 
-Проект на базе **Symfony 7.4+** и **FrankenPHP**, реализующий backend для формы обратной связи с модерацией контента через **Huggingface API**, асинхронной отправкой email-уведомлений через **Symfony Messenger** и защитой от злоупотреблений с помощью **Rate Limiter**.
+Backend-проект на Symfony 7.4 / PHP 8.4, реализующий REST API для обработки сообщений формы обратной связи.
+
+В проекте реализованы:
+- валидация входных данных через DTO и Symfony Validator;
+- модерация сообщений через Hugging Face API;
+- сохранение данных через Doctrine ORM;
+- асинхронная отправка email через Symfony Messenger;
+- rate limiting;
+- HTTP-логирование;
+- OpenAPI/Swagger-документация;
+- Docker-окружения для разработки и production.
 
 ---
 
@@ -16,6 +26,7 @@
 - [API-документация](#-api-документация)
 - [Переменные окружения](#-переменные-окружения)
 - [Логирование](#-логирование)
+- [Engineering decisions](#-engineering-decisions)
 - [Лицензия](#-лицензия)
 
 ---
@@ -184,7 +195,7 @@ symf_internet_lab/
 ### 1. Клонирование репозитория
 
 ```bash
-git clone <url-репозитория> symf_internet_lab
+git clone https://github.com/DenisSv76/internet_labs.git
 cd symf_internet_lab
 ```
 
@@ -297,7 +308,7 @@ docker compose exec php bin/console messenger:stats
 ```ini
 APP_ENV=prod
 APP_SECRET=<сгенерированный-секрет>
-OPENAI_API_KEY="sk-ваш-продакшн-ключ"
+HUGGINGFACE_API_KEY="sk-ваш-продакшн-ключ"
 MY_EMAIL=ваша@почта(замените на свою почту!)
 MAILER_DSN=smtp://ваша@почта:пароль@smtp.ваша@почта:465?encryption=ssl(замените на подключение к своей почте)
 ```
@@ -503,6 +514,27 @@ docker compose down -v
 # Проверка и фикс code-style (.editorconfig)
 # Используется .editorconfig — настройте свою IDE
 ```
+
+---
+
+## 🛠️ Engineering-decisions
+
+### Асинхронная обработка
+
+Email-уведомления не отправляются непосредственно во время HTTP-запроса. После сохранения сообщения создаётся Symfony Messenger message, который обрабатывается отдельным worker.
+Это позволяет отделить обработку HTTP-запроса от внешней операции отправки email.
+
+### Rate limiting
+
+Для API используется Symfony Rate Limiter с ограничением запросов по IP.
+
+### Внешний API
+
+Модерация вынесена в отдельный `HuggingFaceModerationService`, чтобы HTTP-клиент и бизнес-логика модерации не были связаны с контроллером.
+
+### DTO и валидация
+
+Входные данные API передаются через DTO и проверяются Symfony Validator до выполнения основной бизнес-логики.
 
 ---
 
