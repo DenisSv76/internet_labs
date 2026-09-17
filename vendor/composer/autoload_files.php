@@ -18,4 +18,6 @@ return array(
     '9d2b9fc6db0f153a0a149fefb182415e' => $vendorDir . '/symfony/polyfill-php84/bootstrap.php',
     'f598d06aa772fa33d905e87be6398fb1' => $vendorDir . '/symfony/polyfill-intl-idn/bootstrap.php',
     '09f6b20656683369174dd6fa83b7e5fb' => $vendorDir . '/symfony/polyfill-uuid/bootstrap.php',
+    '6124b4c8570aa390c21fafd04a26c69f' => $vendorDir . '/myclabs/deep-copy/src/DeepCopy/deep_copy.php',
+    'ec07570ca5a812141189b1fa81503674' => $vendorDir . '/phpunit/phpunit/src/Framework/Assert/Functions.php',
 );

@@ -2,14 +2,14 @@
 
 namespace App\Service;
 
-use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use DateTimeImmutable;
 
 class RateLimiterService
 {
     public function __construct(
-        private RateLimiterFactory $anonymousApiLimiter,
+        private RateLimiterFactoryInterface $anonymousApiLimiter,
         private int $tokens = 1
     ) {}
 
