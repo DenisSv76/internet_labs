@@ -28,7 +28,7 @@ services:
         alias: 'limiter.anonymous_api'
         public: true
     
-    # явная привязка аргументов для вашего сервиса
+    # явная привязка аргументов для сервиса
     App\Service\RateLimiterService:
         bind:
             $anonymousApiLimiter: '@limiter.anonymous_api.public'

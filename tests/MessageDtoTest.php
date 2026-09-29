@@ -176,7 +176,7 @@ class MessageDtoTest extends KernelTestCase
         $dto = new MessageDto(
             'Иван',
             'ivan@example.com',
-            str_repeat('1', 21),
+            '+' . str_repeat('1', 20),
             'Комментарий',
         );
 
@@ -184,7 +184,7 @@ class MessageDtoTest extends KernelTestCase
 
         $this->assertViolationMessage(
             $violations,
-            'Некорректный формат телефона'
+            'Телефон должен содержать максимум 20 символов'
         );
     }
 
