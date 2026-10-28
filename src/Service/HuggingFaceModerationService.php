@@ -7,11 +7,12 @@ use Exception;
 use Psr\Log\LoggerInterface;
 use Symfony\AI\Platform\Bridge\HuggingFace\Factory;
 use Symfony\AI\Platform\Bridge\HuggingFace\Task;
+use Symfony\AI\Platform\PlatformInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class HuggingFaceModerationService
 {
-    private $platform;
+    private PlatformInterface $platform;
 
     public function __construct(
         private readonly string $huggingFaceApiKey,

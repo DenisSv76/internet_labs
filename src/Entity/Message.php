@@ -13,7 +13,7 @@ class Message
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    private ?int $id = null;
+    private int $id = 0;
 
     #[ORM\Column(length: 40)]
     private ?string $name = null;
@@ -42,7 +42,7 @@ class Message
     #[ORM\Column]
     private ?DateTimeImmutable $updatedAt = null;
 
-    public function getId(): ?int
+    public function getId(): int
     {
         return $this->id;
     }
@@ -88,7 +88,7 @@ class Message
         return $this->ip;
     }
 
-    public function setIp(string $ip): static
+    public function setIp(?string $ip): static
     {
         $this->ip = $ip;
 
@@ -100,7 +100,7 @@ class Message
         return $this->userAgent;
     }
 
-    public function setUserAgent(string $userAgent): static
+    public function setUserAgent(?string $userAgent): static
     {
         $this->userAgent = $userAgent;
 

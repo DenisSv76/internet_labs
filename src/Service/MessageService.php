@@ -23,7 +23,7 @@ class MessageService
      * @throws Exception
      * @throws UnprocessableEntityHttpException
      */
-    public function sendMessage(MessageDto $messageDto): ?int
+    public function sendMessage(MessageDto $messageDto): int
     {
         $errors = $this->validator->validate($messageDto);
 
